@@ -4,6 +4,7 @@ JSON uses camelCase; Python uses snake_case. Every timestamp is normalized to UT
 in and serialized with a trailing ``Z`` on the way out.
 """
 
+import re
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -109,6 +110,53 @@ TimezoneName = Annotated[str, Field(examples=["Asia/Tokyo"]), AfterValidator(_ch
 """An IANA timezone name such as ``Asia/Tokyo``."""
 
 HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$", examples=["#6366f1"])]
+
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _normalize_email(value: Any) -> Any:
+    return value.strip().lower() if isinstance(value, str) else value
+
+
+def _check_email(value: str) -> str:
+    if len(value) > 254 or not _EMAIL.match(value):
+        raise ValueError(f"{value!r} is not a valid email address (expected name@example.com)")
+    return value
+
+
+Email = Annotated[
+    str,
+    BeforeValidator(_normalize_email),
+    AfterValidator(_check_email),
+    Field(examples=["sam@example.com"], json_schema_extra={"format": "email"}),
+]
+"""An email address, trimmed and lowercased."""
+
+_PASSPORT = re.compile(r"^[A-Z0-9]{5,20}$")
+
+
+def _normalize_passport(value: Any) -> Any:
+    if isinstance(value, str):
+        return re.sub(r"[\s-]", "", value).upper()
+    return value
+
+
+def _check_passport(value: str) -> str:
+    if not _PASSPORT.match(value):
+        raise ValueError(
+            f"{value!r} is not a valid passport number (expected 5-20 letters or digits; "
+            "spaces and dashes are ignored)"
+        )
+    return value
+
+
+PassportNumber = Annotated[
+    str,
+    BeforeValidator(_normalize_passport),
+    AfterValidator(_check_passport),
+    Field(examples=["X12345678"]),
+]
+"""A passport number: spaces and dashes removed, letters uppercased, 5-20 characters."""
 
 
 def utc_now() -> datetime:

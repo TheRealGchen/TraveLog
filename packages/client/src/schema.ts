@@ -67,9 +67,29 @@ export interface paths {
         put?: never;
         /**
          * Add a traveler to a trip
-         * @description Appends a traveler. Without `color`, the next unused palette color is assigned. Returns the updated trip; the new traveler is the last item of `travelers`.
+         * @description Appends a traveler. Only `name` is required. Without `color`, the next unused palette color is assigned. Email and passport number must be unique within the trip. Returns the updated trip; the new traveler is the last item of `travelers`.
          */
         post: operations["add_traveler"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trips/{tripId}/travelers/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add several travelers at once
+         * @description Appends 1 to 50 travelers in order, all or nothing: if any entry is invalid, nothing is added and each problem is reported with its path (e.g. `body.travelers.1.email`). Travelers without `color` get successive unused palette colors. Returns the updated trip; the new travelers are the last items of `travelers`.
+         */
+        post: operations["add_travelers"];
         delete?: never;
         options?: never;
         head?: never;
@@ -95,7 +115,7 @@ export interface paths {
         head?: never;
         /**
          * Update a traveler
-         * @description Changes a traveler's name or color. Returns the updated trip.
+         * @description Changes a traveler's name, color, email, or passport number; null clears email or passport number. Returns the updated trip.
          */
         patch: operations["update_traveler"];
         trace?: never;
@@ -387,7 +407,7 @@ export interface components {
         };
         /**
          * AddTravelerRequest
-         * @description Body for `add_traveler`.
+         * @description Body for `add_traveler`, and one entry of `add_travelers`.
          */
         AddTravelerRequest: {
             /**
@@ -397,10 +417,31 @@ export interface components {
              */
             name: string;
             /**
+             * Email
+             * @description Email address. Trimmed and lowercased; must be unique within the trip.
+             */
+            email?: string | null;
+            /**
+             * Passport number
+             * @description Passport number: 5-20 letters or digits; spaces and dashes are removed and letters uppercased. Must be unique within the trip.
+             */
+            passportNumber?: string | null;
+            /**
              * Color
              * @description Avatar color as a `#rrggbb` hex string. Omit it to get the next unused color from a fixed palette.
              */
             color?: string | null;
+        };
+        /**
+         * AddTravelersRequest
+         * @description Body for `add_travelers`: several travelers added at once, all or nothing.
+         */
+        AddTravelersRequest: {
+            /**
+             * Travelers
+             * @description Travelers to append, in order (1 to 50).
+             */
+            travelers: components["schemas"]["AddTravelerRequest"][];
         };
         /**
          * CreateTripRequest
@@ -642,6 +683,16 @@ export interface components {
              * @example #6366f1
              */
             color: string;
+            /**
+             * Email
+             * @description Email address (lowercase), or null.
+             */
+            email: string | null;
+            /**
+             * Passport number
+             * @description Passport number (uppercase, no spaces or dashes), or null.
+             */
+            passportNumber: string | null;
         };
         /**
          * TripList
@@ -862,7 +913,8 @@ export interface components {
         };
         /**
          * UpdateTravelerRequest
-         * @description Body for `update_traveler`. Only the fields you send are changed.
+         * @description Body for `update_traveler`. Only the fields you send are changed; send null to clear
+         *     `email` or `passportNumber`.
          */
         UpdateTravelerRequest: {
             /**
@@ -876,6 +928,16 @@ export interface components {
              * @example #6366f1
              */
             color?: string;
+            /**
+             * Email
+             * @description New email address; null clears it. Unique within the trip.
+             */
+            email?: string | null;
+            /**
+             * Passport number
+             * @description New passport number; null clears it. Unique within the trip.
+             */
+            passportNumber?: string | null;
         };
         /**
          * UpdateTripRequest
@@ -1205,6 +1267,74 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AddTravelerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_travelers: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTravelersRequest"];
             };
         };
         responses: {

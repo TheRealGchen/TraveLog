@@ -13,7 +13,13 @@ from .activity import (
 from .common import SCHEMA_VERSION, ApiModel, format_utc, utc_now
 from .day import Day, DayDocument, DayList, UpdateDayRequest
 from .problem import Problem, ProblemError
-from .traveler import TRAVELER_PALETTE, AddTravelerRequest, Traveler, UpdateTravelerRequest
+from .traveler import (
+    TRAVELER_PALETTE,
+    AddTravelerRequest,
+    AddTravelersRequest,
+    Traveler,
+    UpdateTravelerRequest,
+)
 from .trip import (
     CreateTripRequest,
     Trip,
@@ -37,6 +43,7 @@ __all__ = [
     "ActivityTimeInput",
     "AddActivityRequest",
     "AddTravelerRequest",
+    "AddTravelersRequest",
     "ApiModel",
     "CreateTripRequest",
     "Day",

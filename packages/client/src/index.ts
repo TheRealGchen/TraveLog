@@ -23,6 +23,8 @@ export type UpdateTripRequest = Schemas["UpdateTripRequest"];
 export type AddActivityRequest = Schemas["AddActivityRequest"];
 export type UpdateActivityRequest = Schemas["UpdateActivityRequest"];
 export type UpdateDayRequest = Schemas["UpdateDayRequest"];
+export type AddTravelerRequest = Schemas["AddTravelerRequest"];
+export type UpdateTravelerRequest = Schemas["UpdateTravelerRequest"];
 export type MoveActivityRequest = Schemas["MoveActivityRequest"];
 
 export interface ApiClientOptions {

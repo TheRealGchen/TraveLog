@@ -47,6 +47,7 @@ async def test_openapi_and_llms_txt_are_public(client: httpx.AsyncClient) -> Non
         "get_day",
         "update_day",
         "add_traveler",
+        "add_travelers",
         "update_traveler",
         "remove_traveler",
         "list_activities",
@@ -540,10 +541,165 @@ async def test_traveler_add_update_and_palette(client: httpx.AsyncClient, trip: 
     r = await client.patch(f"/v1/trips/{tid}/travelers/{sam['id']}", json={"name": "Samantha"})
     assert r.status_code == 200
     assert r.json()["travelers"][0] == {**sam, "name": "Samantha"}
+    assert sam["email"] is None and sam["passportNumber"] is None
     r = await client.patch(f"/v1/trips/{tid}/travelers/trv_ghost", json={"name": "x"})
     assert_problem(r, 404, "Traveler trv_ghost not found on trip")
     r = await client.patch(f"/v1/trips/{tid}/travelers/{sam['id']}", json={"color": "red"})
     assert_problem(r, 422, "body.color")
+
+
+async def test_traveler_email_and_passport_are_normalized(
+    client: httpx.AsyncClient, trip: Json
+) -> None:
+    r = await client.post(
+        f"/v1/trips/{trip['id']}/travelers",
+        json={"name": "Sam", "email": " Sam@Example.COM ", "passportNumber": "x 1234-5678"},
+    )
+    assert r.status_code == 201, r.text
+    sam = r.json()["travelers"][-1]
+    assert sam["email"] == "sam@example.com" and sam["passportNumber"] == "X12345678"
+    r = await client.post(f"/v1/trips/{trip['id']}/travelers", json={"name": "Kai"})
+    assert r.json()["travelers"][-1]["email"] is None
+    assert r.json()["travelers"][-1]["passportNumber"] is None
+
+
+@pytest.mark.parametrize(
+    ("body", "fragments"),
+    [
+        ({"name": "x", "email": "not-an-email"}, ["body.email", "not a valid email"]),
+        ({"name": "x", "passportNumber": "12"}, ["body.passportNumber", "5-20 letters or digits"]),
+        ({"name": "x", "passportNumber": "AB12#45"}, ["body.passportNumber"]),
+    ],
+)
+async def test_invalid_email_or_passport(
+    client: httpx.AsyncClient, trip: Json, body: Json, fragments: list[str]
+) -> None:
+    r = await client.post(f"/v1/trips/{trip['id']}/travelers", json=body)
+    assert_problem(r, 422, *fragments)
+
+
+async def test_bulk_add_appends_in_order_with_palette_colors(
+    client: httpx.AsyncClient, trip: Json
+) -> None:
+    await add_traveler(client, trip["id"], "First")
+    r = await client.post(
+        f"/v1/trips/{trip['id']}/travelers/batch",
+        json={
+            "travelers": [
+                {"name": "Sam Lee", "email": "sam@example.com", "passportNumber": "X12345678"},
+                {"name": "Ana Ruiz", "email": "ana@example.com", "color": "#000000"},
+                {"name": "Kai"},
+            ]
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.headers["ETag"]
+    travelers = r.json()["travelers"]
+    assert [t["name"] for t in travelers] == ["First", "Sam Lee", "Ana Ruiz", "Kai"]
+    assert [t["color"] for t in travelers] == ["#6366f1", "#ec4899", "#000000", "#f59e0b"]
+    assert len({t["id"] for t in travelers}) == 4
+    assert travelers[1]["passportNumber"] == "X12345678"
+
+
+async def test_bulk_add_is_all_or_nothing(client: httpx.AsyncClient, trip: Json) -> None:
+    url = f"/v1/trips/{trip['id']}/travelers/batch"
+    r = await client.post(
+        url, json={"travelers": [{"name": "Ok"}, {"name": "Bad", "email": "nope"}, {"name": "Ok2"}]}
+    )
+    assert_problem(r, 422, "body.travelers.1.email")
+    assert (await client.get(f"/v1/trips/{trip['id']}")).json()["travelers"] == []
+    assert_problem(await client.post(url, json={"travelers": []}), 422, "body.travelers")
+    too_many = {"travelers": [{"name": f"T{i}"} for i in range(51)]}
+    assert_problem(await client.post(url, json=too_many), 422, "body.travelers")
+
+
+async def test_duplicate_email_or_passport_is_rejected(
+    client: httpx.AsyncClient, trip: Json
+) -> None:
+    tid = trip["id"]
+    await client.post(
+        f"/v1/trips/{tid}/travelers",
+        json={"name": "Sam", "email": "sam@example.com", "passportNumber": "X12345678"},
+    )
+    r = await client.post(
+        f"/v1/trips/{tid}/travelers", json={"name": "Imposter", "email": "SAM@example.com"}
+    )
+    assert_problem(r, 422, "body.email", "already used by Sam")
+    r = await client.post(
+        f"/v1/trips/{tid}/travelers/batch",
+        json={
+            "travelers": [
+                {"name": "A", "email": "a@example.com"},
+                {"name": "B", "email": "a@example.com"},
+                {"name": "C", "passportNumber": "x1234-5678"},
+            ]
+        },
+    )
+    problem = assert_problem(r, 422, "appears more than once", "already used by Sam")
+    assert [e["path"] for e in problem["errors"]] == [
+        "body.travelers.1.email",
+        "body.travelers.2.passportNumber",
+    ]
+    assert len((await client.get(f"/v1/trips/{tid}")).json()["travelers"]) == 1
+
+
+async def test_update_traveler_email_and_passport(client: httpx.AsyncClient, trip: Json) -> None:
+    tid = trip["id"]
+    r = await client.post(
+        f"/v1/trips/{tid}/travelers/batch",
+        json={"travelers": [{"name": "Sam", "email": "sam@example.com"}, {"name": "Ana"}]},
+    )
+    sam, ana = r.json()["travelers"]
+    url = f"/v1/trips/{tid}/travelers/{ana['id']}"
+    r = await client.patch(url, json={"email": "ana@example.com", "passportNumber": "p9876543"})
+    assert r.status_code == 200, r.text
+    assert r.json()["travelers"][1] == {
+        **ana,
+        "email": "ana@example.com",
+        "passportNumber": "P9876543",
+    }
+    r = await client.patch(url, json={"passportNumber": None})
+    assert r.json()["travelers"][1]["passportNumber"] is None
+    assert r.json()["travelers"][1]["email"] == "ana@example.com"
+    assert_problem(await client.patch(url, json={"email": "sam@example.com"}), 422, "Sam")
+    # Re-saving your own email is fine.
+    r = await client.patch(
+        f"/v1/trips/{tid}/travelers/{sam['id']}", json={"email": "sam@example.com"}
+    )
+    assert r.status_code == 200
+    assert_problem(await client.patch(url, json={"name": None}), 422, "cannot be null")
+
+
+async def test_legacy_travelers_without_email_or_passport_read_as_null(
+    client: httpx.AsyncClient, trip: Json, db: Any
+) -> None:
+    await db.trips.update_one(
+        {"_id": trip["id"]},
+        {"$set": {"travelers": [{"id": "trv_OLD", "name": "Old", "color": "#6366f1"}]}},
+    )
+    t = (await client.get(f"/v1/trips/{trip['id']}")).json()["travelers"][0]
+    assert t == {
+        "id": "trv_OLD",
+        "name": "Old",
+        "color": "#6366f1",
+        "email": None,
+        "passportNumber": None,
+    }
+    listed = (await client.get("/v1/trips")).json()["trips"][0]["travelers"][0]
+    assert listed["email"] is None
+
+
+async def test_concurrent_bulk_adds_all_land(client: httpx.AsyncClient, trip: Json) -> None:
+    url = f"/v1/trips/{trip['id']}/travelers/batch"
+    results = await asyncio.gather(
+        *(
+            client.post(url, json={"travelers": [{"name": f"G{g}-{i}"} for i in range(3)]})
+            for g in range(4)
+        )
+    )
+    assert all(r.status_code == 201 for r in results)
+    travelers = (await client.get(f"/v1/trips/{trip['id']}")).json()["travelers"]
+    assert len(travelers) == 12
 
 
 async def test_removing_traveler_cleans_up_activities(

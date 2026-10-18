@@ -4,6 +4,7 @@ import type {
   Activity,
   ActivityStatus,
   AddActivityRequest,
+  AddTravelerRequest,
   CreateTripRequest,
   Day,
   DayList,
@@ -11,12 +12,13 @@ import type {
   Trip,
   UpdateActivityRequest,
   UpdateDayRequest,
+  UpdateTravelerRequest,
   UpdateTripRequest,
 } from "@travel/client";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { api, errorMessage, unwrap } from "./api";
+import { ApiError, api, errorMessage, unwrap } from "./api";
 
 /** Poll open trip views so edits made by agents through the API show up. */
 const POLL_MS = 10_000;
@@ -145,25 +147,35 @@ export function useDeleteTrip(tripId: string) {
 export function useAddTraveler(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
+    mutationFn: (body: AddTravelerRequest) =>
+      unwrap(api.POST("/v1/trips/{tripId}/travelers", { params: { path: { tripId } }, body })),
+    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onError,
+  });
+}
+
+/** Bulk add. Validation errors (422) are shown per row by the caller, so they don't toast. */
+export function useAddTravelers(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (travelers: AddTravelerRequest[]) =>
       unwrap(
-        api.POST("/v1/trips/{tripId}/travelers", {
+        api.POST("/v1/trips/{tripId}/travelers/batch", {
           params: { path: { tripId } },
-          body: { name },
+          body: { travelers },
         }),
       ),
-    onSuccess: (trip) => {
-      refreshTrip(qc, tripId, trip);
-      refreshDays(qc, tripId);
+    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onError: (error) => {
+      if (!(error instanceof ApiError && error.status === 422)) onError(error);
     },
-    onError,
   });
 }
 
 export function useUpdateTraveler(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ travelerId, ...body }: { travelerId: string; name?: string; color?: string }) =>
+    mutationFn: ({ travelerId, ...body }: { travelerId: string } & UpdateTravelerRequest) =>
       unwrap(
         api.PATCH("/v1/trips/{tripId}/travelers/{travelerId}", {
           params: { path: { tripId, travelerId } },

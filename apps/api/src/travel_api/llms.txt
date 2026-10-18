@@ -33,7 +33,10 @@ A trip is a collection of days; each day holds that day's activities.
 
 - Trip: `id, name, destination, timezone, startDate, endDate, travelers[], ownerId,
   schemaVersion, createdAt, updatedAt` (+ computed `daysUntilStart`, `status`).
-- Traveler (inside a trip): `id, name, color` (`#rrggbb`; assigned from a palette if omitted).
+- Traveler (inside a trip): `id, name, color, email | null, passportNumber | null`. Only
+  `name` is required. `color` (`#rrggbb`) is assigned from a palette if omitted. Emails are
+  lowercased; passport numbers are uppercased with spaces and dashes removed (5-20 letters or
+  digits). Email and passport number must each be unique within the trip.
 - Day: `tripId, date, dayNumber, lodging {name} | null` (where you sleep that night),
   `startLocation {name} | null` (where the day starts), `activities[], createdAt, updatedAt`.
   There is exactly one day per date from startDate to endDate; days are created and removed
@@ -58,8 +61,13 @@ Days
 - update_day: PATCH /v1/trips/{tripId}/days/{date}  {lodging?, startLocation?}  (null clears)
 
 Travelers (each returns the updated trip)
-- add_traveler: POST /v1/trips/{tripId}/travelers  {name, color?}  (new traveler is last)
-- update_traveler: PATCH /v1/trips/{tripId}/travelers/{travelerId}  {name?, color?}
+- add_traveler: POST /v1/trips/{tripId}/travelers  {name, email?, passportNumber?, color?}
+  (new traveler is last)
+- add_travelers: POST /v1/trips/{tripId}/travelers/batch  {travelers: [{name, email?,
+  passportNumber?, color?}, ...]}  (1-50, all or nothing; errors name the row, e.g.
+  `body.travelers.1.email`)
+- update_traveler: PATCH /v1/trips/{tripId}/travelers/{travelerId}  {name?, color?, email?,
+  passportNumber?}  (null clears email or passportNumber)
 - remove_traveler: DELETE /v1/trips/{tripId}/travelers/{travelerId}  (also removed from activities)
 
 Activities
@@ -74,7 +82,7 @@ Activities
 
 ## Common workflows
 
-1. Plan a trip: create_trip -> add_traveler (once per person) -> update_day to set lodging for
+1. Plan a trip: create_trip -> add_travelers (everyone at once) -> update_day to set lodging for
    each night -> add_activity on each day -> list_days to review the plan.
 2. Reschedule: move_activity with a new `date` (keeps times) or with `startAt`/`endAt`.
 3. Mark something done: update_activity {"status": "done"}.

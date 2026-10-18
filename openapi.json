@@ -438,7 +438,7 @@
           "Travelers"
         ],
         "summary": "Add a traveler to a trip",
-        "description": "Appends a traveler. Without `color`, the next unused palette color is assigned. Returns the updated trip; the new traveler is the last item of `travelers`.",
+        "description": "Appends a traveler. Only `name` is required. Without `color`, the next unused palette color is assigned. Email and passport number must be unique within the trip. Returns the updated trip; the new traveler is the last item of `travelers`.",
         "operationId": "add_traveler",
         "security": [
           {
@@ -551,13 +551,132 @@
         }
       }
     },
+    "/v1/trips/{tripId}/travelers/batch": {
+      "post": {
+        "tags": [
+          "Travelers"
+        ],
+        "summary": "Add several travelers at once",
+        "description": "Appends 1 to 50 travelers in order, all or nothing: if any entry is invalid, nothing is added and each problem is reported with its path (e.g. `body.travelers.1.email`). Travelers without `color` get successive unused palette colors. Returns the updated trip; the new travelers are the last items of `travelers`.",
+        "operationId": "add_travelers",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTravelersRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/trips/{tripId}/travelers/{travelerId}": {
       "patch": {
         "tags": [
           "Travelers"
         ],
         "summary": "Update a traveler",
-        "description": "Changes a traveler's name or color. Returns the updated trip.",
+        "description": "Changes a traveler's name, color, email, or passport number; null clears email or passport number. Returns the updated trip.",
         "operationId": "update_traveler",
         "security": [
           {
@@ -2105,6 +2224,37 @@
               "Sam"
             ]
           },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "examples": [
+                  "sam@example.com"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Email address. Trimmed and lowercased; must be unique within the trip."
+          },
+          "passportNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "examples": [
+                  "X12345678"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passport number",
+            "description": "Passport number: 5-20 letters or digits; spaces and dashes are removed and letters uppercased. Must be unique within the trip."
+          },
           "color": {
             "anyOf": [
               {
@@ -2128,7 +2278,28 @@
           "name"
         ],
         "title": "AddTravelerRequest",
-        "description": "Body for `add_traveler`."
+        "description": "Body for `add_traveler`, and one entry of `add_travelers`."
+      },
+      "AddTravelersRequest": {
+        "properties": {
+          "travelers": {
+            "items": {
+              "$ref": "#/components/schemas/AddTravelerRequest"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Travelers",
+            "description": "Travelers to append, in order (1 to 50)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "travelers"
+        ],
+        "title": "AddTravelersRequest",
+        "description": "Body for `add_travelers`: several travelers added at once, all or nothing."
       },
       "CreateTripRequest": {
         "properties": {
@@ -2506,6 +2677,37 @@
             "examples": [
               "#6366f1"
             ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "examples": [
+                  "sam@example.com"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "Email address (lowercase), or null."
+          },
+          "passportNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "examples": [
+                  "X12345678"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passport number",
+            "description": "Passport number (uppercase, no spaces or dashes), or null."
           }
         },
         "additionalProperties": false,
@@ -2513,7 +2715,9 @@
         "required": [
           "id",
           "name",
-          "color"
+          "color",
+          "email",
+          "passportNumber"
         ],
         "title": "Traveler",
         "description": "A person on the trip. Travelers are stored inside their trip document."
@@ -2887,12 +3091,43 @@
             "examples": [
               "#6366f1"
             ]
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email",
+                "examples": [
+                  "sam@example.com"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email",
+            "description": "New email address; null clears it. Unique within the trip."
+          },
+          "passportNumber": {
+            "anyOf": [
+              {
+                "type": "string",
+                "examples": [
+                  "X12345678"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passport number",
+            "description": "New passport number; null clears it. Unique within the trip."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "UpdateTravelerRequest",
-        "description": "Body for `update_traveler`. Only the fields you send are changed."
+        "description": "Body for `update_traveler`. Only the fields you send are changed; send null to clear\n`email` or `passportNumber`."
       },
       "UpdateTripRequest": {
         "properties": {

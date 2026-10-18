@@ -77,8 +77,28 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
   changing the dates each touch the trip and then its days in a second operation. A crash
   between the two leaves orphaned or missing days (missing days are recreated on read);
   acceptable at this scale.
-- **New travelers get the first palette color not already used on the trip**, cycling when all
-  are used, computed in the same atomic update.
+- **Traveler email and passport number** are optional and nullable; only `name` is required.
+  - Emails are trimmed, lowercased, and checked with a simple `local@domain.tld` pattern (no
+    email-validation dependency).
+  - Passport numbers have spaces and dashes removed, are uppercased, and must be 5-20 letters
+    or digits. There is no per-country format check.
+  - Each must be unique within a trip (422 naming the traveler who already has it).
+  - Travelers stored before these fields existed read as null (migrate on read in
+    `repository/trips.py:_trip`).
+- **Passport numbers are returned in full** wherever travelers appear, including `list_trips`,
+  and are stored as plain text, as requested. Masking or encryption can come with user
+  accounts.
+- **Bulk add (`add_travelers`)** takes 1-50 travelers and is all or nothing.
+  - Format errors are caught when the request is validated. Duplicates (within the batch or
+    against the trip) are checked next. Both report per-row paths such as
+    `body.travelers.1.email`, which the UI maps back to the pasted lines.
+  - The append is a single `$reduce` pipeline update. Its filter rejects the write if any
+    existing traveler already has one of the new emails or passport numbers, so concurrent adds
+    can't create duplicates.
+  - `add_traveler` is a batch of one through the same code.
+- **New travelers get the first palette color not already used on the trip** (including colors
+  assigned earlier in the same batch), cycling when all are used, computed in the same atomic
+  update.
 - **Traveler mutations return the whole trip** (the resource that changed); `add_traveler`
   returns 201 and the new traveler is the last element of `travelers`.
 - **Deletes return 204** with no body (`delete_trip`, `delete_activity`). `remove_traveler`
@@ -112,7 +132,11 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Editors send only changed fields**, so a save doesn't clobber an agent's concurrent edit to
   another field. The UI doesn't send `If-Match`.
 - **Traveler colors** are edited with the native color input; automatic colors are assigned by
-  the API.
+  the API. Email and passport number are edited in the traveler's chip popover; clearing a field
+  sends null.
+- **Bulk add** is a paste box: one traveler per line as `Name, email, passport`, with tabs also
+  accepted for spreadsheet pastes. The UI only splits lines for the preview; the API does all
+  validation.
 - **Status** is shown as a small picker on every card (optimistic `update_activity`), rather
   than a done/undone checkbox, so the UI doesn't need status rules of its own.
 - **Drag and drop was removed** with the itinerary list. Moving an activity is done with the Day

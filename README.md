@@ -86,10 +86,18 @@ Create a trip in Tokyo:
 curl -s -X POST $API/trips -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name": "Japan 2027", "destination": "Tokyo & Kyoto", "timezone": "Asia/Tokyo", "startDate": "2027-04-02", "endDate": "2027-04-14"}'
 ```
 
-Add a traveler (the response is the trip; the new traveler is last in `travelers`):
+Add a traveler. Only `name` is required; the response is the trip, with the new traveler last
+in `travelers`:
 
 ```bash
-curl -s -X POST $API/trips/$TRIP/travelers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name": "Sam"}'
+curl -s -X POST $API/trips/$TRIP/travelers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name": "Sam Lee", "email": "sam@example.com", "passportNumber": "X12345678"}'
+```
+
+Or add several at once. It's all or nothing: if any row is invalid, nothing is added and each
+error names its row (for example `body.travelers.1.email`):
+
+```bash
+curl -s -X POST $API/trips/$TRIP/travelers/batch -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"travelers": [{"name": "Ana Ruiz", "email": "ana@example.com"}, {"name": "Kai"}]}'
 ```
 
 Set where you're staying on April 3 and where the day starts:
@@ -164,7 +172,8 @@ Every UI action is exactly one documented API operation; the web app has no othe
 | Open a day card (day page) | `get_day` |
 | Day page, "Staying tonight" / "Starting from" | `update_day` |
 | Add traveler | `add_traveler` |
-| Traveler chip, Save (name, color) | `update_traveler` |
+| Add traveler, "Add multiple…" (paste box) | `add_travelers` |
+| Traveler chip, Save (name, email, passport number, color) | `update_traveler` |
 | Traveler chip, Remove | `remove_traveler` |
 | Things to do tab and its status and traveler filters | `list_activities` |
 | Day page, "Add an activity…" | `add_activity` |

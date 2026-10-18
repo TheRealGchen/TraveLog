@@ -8,7 +8,7 @@ function tokyoDate(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-test("create a trip, add a traveler, plan a day, check countdown and day cards", async ({
+test("create a trip, bulk-add travelers, plan a day, check countdown and day cards", async ({
   page,
 }) => {
   const name = `Smoke ${Date.now()}`;
@@ -39,11 +39,16 @@ test("create a trip, add a traveler, plan a day, check countdown and day cards",
   await expect(page.getByText("days to go")).toBeVisible();
   await expect(page.getByText("10", { exact: true })).toBeVisible();
 
-  // Add a traveler.
+  // Add two travelers at once through the bulk dialog.
   await page.getByRole("button", { name: "Add traveler" }).click();
-  await page.getByLabel("Name").fill("Sam Lee");
-  await page.locator("[data-slot=popover-content]").getByRole("button", { name: "Add" }).click();
+  await page.getByRole("button", { name: "Add multiple…" }).click();
+  const bulk = page.getByRole("dialog", { name: "Add multiple travelers" });
+  await bulk.getByRole("textbox", { name: "Travelers", exact: true }).fill(
+    "Sam Lee, sam@example.com, X1234 5678\nAna Ruiz, ana@example.com",
+  );
+  await bulk.getByRole("button", { name: "Add 2 travelers" }).click();
   await expect(page.getByRole("button", { name: "SL Sam Lee" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "AR Ana Ruiz" })).toBeVisible();
 
   // Open day 2 from its card, set lodging, and quick-add a timed activity.
   await page.getByRole("link", { name: /^Day 2,/ }).click();
