@@ -18,9 +18,10 @@ install:
     cd {{api}} && uv sync
     pnpm install
 
-# Start a local MongoDB in Docker (alternative to Atlas)
-mongo:
-    docker start travel-mongo 2>/dev/null || docker run -d --name travel-mongo -p 27017:27017 mongo:8
+# Start MongoDB in Docker, reachable only from this machine, with data in a named volume
+mongo docker="docker":
+    {{docker}} start travel-mongo 2>/dev/null || {{docker}} run -d --name travel-mongo \
+        --restart unless-stopped -p 127.0.0.1:27017:27017 -v travel-mongo-data:/data/db mongo:8
 
 # Run the API and the web app together (Ctrl-C stops both)
 dev:
@@ -37,6 +38,10 @@ dev-api:
 # Run the web app
 dev-web:
     cd {{web}} && pnpm exec next dev --port {{web_port}}
+
+# Production build of the web app (bakes in API_URL and API_TOKEN from .env)
+build:
+    pnpm --filter @travel/web build
 
 # Lint and type-check everything
 lint:
@@ -74,3 +79,19 @@ check-client:
 # Playwright smoke test (starts MongoDB, its own API, and a production web build)
 e2e: mongo
     pnpm --filter @travel/web e2e
+
+# Set up this clone on a fresh Ubuntu/Debian node: services, nginx, and automatic HTTPS
+provision domain email:
+    ./deploy/provision.sh {{domain}} {{email}}
+
+# Update a provisioned node: pull, install, rebuild, and restart the services
+deploy:
+    git pull --ff-only
+    just install
+    just build
+    sudo systemctl restart travel-api travel-web
+    @echo "Deployed $(git rev-parse --short HEAD)."
+
+# Follow the production service logs
+logs:
+    journalctl -u travel-api -u travel-web -f

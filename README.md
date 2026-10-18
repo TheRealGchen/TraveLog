@@ -64,11 +64,70 @@ exports it, and the web app's `next.config.ts` reads it.
 | `just e2e` | Playwright smoke test (starts its own API and a production web build) |
 | `just openapi` | Re-export `openapi.json` from the API |
 | `just gen-client` | Regenerate `packages/client/src/schema.ts` from `openapi.json` |
+| `just provision <domain> <email>` | Set up a server with nginx and HTTPS (see below) |
+| `just deploy` | Update a provisioned server |
 
 When you change an API model or route, run `just openapi gen-client` and commit both files.
 `just test` (and CI) fails if either is stale.
 
 API tests run against a throwaway MongoDB container (testcontainers), so Docker must be running.
+
+## Deploying to a server
+
+`just provision` sets up a fresh Ubuntu or Debian node from a clone of this repo. It installs:
+
+- **MongoDB** in Docker, reachable only from the node itself;
+- **the API and the web app** as systemd services (`travel-api`, `travel-web`), listening on
+  localhost;
+- **nginx** in front, serving one domain: `/v1`, `/openapi.json`, `/llms.txt`, and `/docs` go to
+  the API, and everything else goes to the web app;
+- **HTTPS** from Let's Encrypt through certbot, with HTTP redirected to HTTPS and automatic
+  renewal (`certbot.timer`).
+
+Before you start, point your domain's DNS at the node and open ports 80 and 443. Then, on the
+node, as a regular user with sudo, install `just`:
+
+```bash
+sudo apt-get install -y just git
+```
+
+That package needs Ubuntu 24.04 or later. On older Ubuntu or on Debian 12, use just's installer
+instead: `curl -sSf https://just.systems/install.sh | sudo bash -s -- --to /usr/local/bin`.
+
+Clone the repo:
+
+```bash
+git clone <your-repo-url> travel-planner && cd travel-planner
+```
+
+Provision, replacing the domain and email (Let's Encrypt sends expiry notices to the email):
+
+```bash
+just provision travel.example.com you@example.com
+```
+
+It writes `.env` for production (`API_URL` and `WEB_ORIGIN` become `https://<domain>`). If no
+token is set, it generates a random `API_TOKEN`; agents use that token to call
+`https://<domain>/v1`. Re-running it is safe: it keeps the token, the data, and the certificate.
+
+To ship new commits later (pull, install, rebuild, restart):
+
+```bash
+just deploy
+```
+
+Follow the service logs:
+
+```bash
+just logs
+```
+
+The site is not password-protected. The web app runs entirely in the browser, so the API token is
+in its JavaScript, and anyone who can open the site can use the API. Keep that in mind before
+putting real passport numbers on a public domain.
+
+The deployment files are in `deploy/`: the nginx site and proxy snippet, the systemd units, and
+`provision.sh`.
 
 ## Using the API with curl
 

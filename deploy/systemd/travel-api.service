@@ -1,0 +1,20 @@
+# Rendered to /etc/systemd/system/travel-api.service by `just provision`.
+[Unit]
+Description=Travel Planner API (FastAPI on uvicorn)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO__/apps/api
+EnvironmentFile=__REPO__/.env
+ExecStart=__REPO__/apps/api/.venv/bin/uvicorn travel_api.main:create_app --factory --host 127.0.0.1 --port __API_PORT__ --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

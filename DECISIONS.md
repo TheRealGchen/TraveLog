@@ -171,3 +171,41 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Playwright** runs its own API (port 8100, database `travel_planner_e2e`) and a production
   build of the web app (port 3100), with the browser in `America/Los_Angeles` and the trip in
   `Asia/Tokyo`.
+
+## Deployment
+
+- **Target:** a single Ubuntu/Debian node, provisioned from a clone of the repo with
+  `just provision <domain> <email>` (`deploy/provision.sh`). It is safe to re-run. `just deploy`
+  updates a provisioned node.
+- **Services:**
+  - the API runs under systemd with uvicorn's `--proxy-headers`, on `127.0.0.1:8000`;
+  - the web app runs under systemd as a production Next.js build (`next start`), on
+    `127.0.0.1:3001`;
+  - both run as the provisioning user and read the repo's `.env` (mode 600).
+- **One domain, routed by path.** nginx sends `/v1/`, `/openapi.json`, `/llms.txt`, `/docs`,
+  and `/redoc` to the API and everything else to the web app. The browser therefore calls the
+  API on the same origin, with no CORS and one certificate. `API_URL` is that domain and is
+  baked into the web build, so `just build` must run after `.env` changes (provision and
+  deploy both do).
+- **HTTPS:**
+  - certbot's nginx plugin (`--redirect --keep-until-expiring`) adds TLS and the HTTP→HTTPS
+    redirect to the site nginx serves;
+  - the `certbot.timer` from the apt package renews the certificate;
+  - re-provisioning re-renders the plain-HTTP site and certbot reinstalls the existing
+    certificate.
+- **Caching:** `/_next/static/` assets are content-hashed, so nginx serves them as cacheable
+  for a year and immutable. It replaces Next's header rather than adding a second one, and
+  hides `X-Powered-By`.
+- **MongoDB** runs in Docker on the node with `--restart unless-stopped`, data in the
+  `travel-mongo-data` volume, and the port bound to `127.0.0.1` only. Docker's published ports
+  bypass ufw, so binding to all interfaces would expose the unauthenticated database.
+  `just mongo` uses the same settings for local development.
+- **No access protection**, by choice: the site is open, and the bearer token is visible in the
+  web app's JavaScript. HTTP basic auth on the web routes (leaving `/v1` on bearer auth) is
+  the simple upgrade when needed.
+- **Toolchain on the node:**
+  - Node 24 from NodeSource;
+  - pnpm 10 via npm;
+  - uv from Astral's installer (it downloads the Python version the API pins);
+  - nginx, certbot, and Docker from apt;
+  - `just` itself must be installed first (`apt-get install just`).
