@@ -1,4 +1,4 @@
-"""Date and time rules: trip countdowns, deriving activity days, and moving activities."""
+"""Date and time rules: trip countdowns, trip days, activity times, and moving activities."""
 
 from collections.abc import Iterable
 from datetime import UTC, date, datetime, timedelta
@@ -6,11 +6,11 @@ from zoneinfo import ZoneInfo
 
 from .errors import ApiError, invalid
 from .models import (
-    Activity,
-    ActivityStatus,
+    ActivityDocument,
+    ActivityTime,
+    ActivityTimeInput,
+    DayDocument,
     MoveActivityRequest,
-    Schedule,
-    ScheduleInput,
     Trip,
     TripStatus,
     format_utc,
@@ -38,35 +38,37 @@ def trip_days(start_date: str, end_date: str) -> list[str]:
     return [(start + timedelta(days=i)).isoformat() for i in range((end - start).days + 1)]
 
 
-def _check_in_trip(day: str, trip: Trip, path: str, what: str) -> None:
-    if not trip.start_date <= day <= trip.end_date:
+def day_number(trip: Trip, day: str) -> int:
+    return (date.fromisoformat(day) - date.fromisoformat(trip.start_date)).days + 1
+
+
+def in_trip(trip: Trip, day: str) -> bool:
+    return trip.start_date <= day <= trip.end_date
+
+
+def check_day_in_trip(trip: Trip, day: str, path: str) -> None:
+    if not in_trip(trip, day):
         raise invalid(
             path,
-            f"{what} {day} is outside the trip ({trip.start_date} to {trip.end_date}, "
-            f"{trip.timezone}); pick a day in that range or unschedule the activity",
+            f"{day} is outside the trip ({trip.start_date} to {trip.end_date}); pick a day in "
+            "that range",
         )
 
 
-def resolve_schedule(value: ScheduleInput | None, trip: Trip, path: str) -> Schedule:
-    """Turn a requested schedule into the stored one, deriving ``date`` from ``startAt``."""
-    if value is None or (value.date is None and value.start_at is None):
-        return Schedule(date=None, start_at=None, end_at=None)
-    day = value.date
-    if value.start_at is not None:
-        derived = local_date(value.start_at, trip.timezone)
-        if day is not None and day != derived:
-            raise invalid(
-                f"{path}.date",
-                f"date {day} does not match startAt {format_utc(value.start_at)}, which is on "
-                f"{derived} in {trip.timezone}; omit date (it is derived from startAt) or make "
-                f"them agree",
-            )
-        day = derived
-        _check_in_trip(day, trip, f"{path}.startAt", "startAt falls on")
-    else:
-        assert day is not None
-        _check_in_trip(day, trip, f"{path}.date", "date")
-    return Schedule(date=day, start_at=value.start_at, end_at=value.end_at)
+def resolve_time(
+    value: ActivityTimeInput | None, day: str, trip: Trip, path: str
+) -> ActivityTime | None:
+    """Validate requested times for an activity on ``day``: startAt must fall on that day."""
+    if value is None:
+        return None
+    on = local_date(value.start_at, trip.timezone)
+    if on != day:
+        raise invalid(
+            f"{path}.startAt",
+            f"startAt {format_utc(value.start_at)} is on {on} in {trip.timezone}, but this "
+            f"activity is on {day}. Pick a time on {day}, or use move_activity to change its day",
+        )
+    return ActivityTime(start_at=value.start_at, end_at=value.end_at)
 
 
 def _shift_to_day(instant: datetime, timezone: str, day_offset: int) -> datetime:
@@ -77,85 +79,77 @@ def _shift_to_day(instant: datetime, timezone: str, day_offset: int) -> datetime
     return moved.astimezone(UTC)
 
 
-def move_schedule(current: Schedule, request: MoveActivityRequest, trip: Trip) -> Schedule:
-    """Apply a ``move_activity`` request to an activity's current schedule."""
+def move_time(
+    current: ActivityTime | None, from_day: str, request: MoveActivityRequest, trip: Trip
+) -> ActivityTime | None:
+    """The activity's times after a ``move_activity`` request to ``request.date``."""
     sent = request.model_fields_set
-    if request.date is None:
-        return Schedule(date=None, start_at=None, end_at=None)
-
-    if "start_at" in sent and request.start_at is not None:
+    if request.start_at is not None:
         end_at = request.end_at
-        if "end_at" not in sent and current.start_at and current.end_at:
+        if "end_at" not in sent and current is not None and current.end_at is not None:
             end_at = request.start_at + (current.end_at - current.start_at)
-        target = ScheduleInput(date=request.date, start_at=request.start_at, end_at=end_at)
-        return resolve_schedule(target, trip, "body")
-
-    _check_in_trip(request.date, trip, "body.date", "date")
-    if current.start_at is None:
-        # All-day or unscheduled: only the day changes.
-        return Schedule(date=request.date, start_at=None, end_at=None)
+        target = ActivityTimeInput(start_at=request.start_at, end_at=end_at)
+        return resolve_time(target, request.date, trip, "body")
+    if current is None:
+        return None
     # Keep each time of day on the new day, in the trip's timezone.
-    from_day = date.fromisoformat(local_date(current.start_at, trip.timezone))
-    offset = (date.fromisoformat(request.date) - from_day).days
+    offset = (date.fromisoformat(request.date) - date.fromisoformat(from_day)).days
     start_at = _shift_to_day(current.start_at, trip.timezone, offset)
     end_at = _shift_to_day(current.end_at, trip.timezone, offset) if current.end_at else None
     if "end_at" in sent:
         end_at = None
-    return Schedule(date=local_date(start_at, trip.timezone), start_at=start_at, end_at=end_at)
+    return ActivityTime(start_at=start_at, end_at=end_at)
 
 
-def status_after_reschedule(status: ActivityStatus, new_date: str | None) -> ActivityStatus:
-    """Scheduling an idea makes it planned; unscheduling a planned activity makes it an idea."""
-    if new_date is not None and status == "idea":
-        return "planned"
-    if new_date is None and status == "planned":
-        return "idea"
-    return status
-
-
-def default_status(schedule: Schedule) -> ActivityStatus:
-    return "planned" if schedule.date is not None else "idea"
-
-
-def activities_outside_range(
-    activities: Iterable[Activity], start_date: str, end_date: str, timezone: str
-) -> list[tuple[Activity, str]]:
-    """Scheduled activities whose day (recomputed in ``timezone``) would fall outside the range."""
-    outside = []
-    for activity in activities:
-        s = activity.schedule
-        day = local_date(s.start_at, timezone) if s.start_at else s.date
-        if day is not None and not start_date <= day <= end_date:
-            outside.append((activity, day))
-    return outside
-
-
-def sort_key_in_day(activity: Activity) -> tuple[bool, datetime, datetime]:
-    start = activity.schedule.start_at
+def sort_key_in_day(activity: ActivityDocument) -> tuple[bool, datetime, datetime]:
+    start = activity.time.start_at if activity.time else None
     return (start is None, start or activity.created_at, activity.created_at)
 
 
-def sort_key_flat(activity: Activity) -> tuple[bool, str, bool, datetime, datetime]:
-    s = activity.schedule
-    return (
-        s.date is None,
-        s.date or "",
-        s.start_at is None,
-        s.start_at or activity.created_at,
-        activity.created_at,
+def day_has_content(day: DayDocument) -> bool:
+    return bool(day.lodging or day.start_location or day.activities)
+
+
+def days_conflict(days: list[DayDocument], start: str, end: str) -> ApiError:
+    """409 for days that would fall outside a new trip range but still hold plans."""
+    listed = ", ".join(
+        f"{d.date} ({len(d.activities)} activit{'y' if len(d.activities) == 1 else 'ies'}"
+        f"{', lodging' if d.lodging else ''}{', start location' if d.start_location else ''})"
+        for d in days[:10]
+    )
+    more = f" and {len(days) - 10} more" if len(days) > 10 else ""
+    return ApiError(
+        409,
+        f"The new dates ({start} to {end}) would drop {len(days)} day"
+        f"{' that still has' if len(days) == 1 else 's that still have'} plans: {listed}{more}. "
+        "Move their activities (move_activity) and clear lodging and start location "
+        "(update_day) first.",
+        errors=[{"path": f"days.{d.date}", "message": "has plans"} for d in days],
     )
 
 
-def conflict_with_activities(outside: list[tuple[Activity, str]], trip_range: str) -> ApiError:
-    listed = ", ".join(f"{a.id} '{a.title}' ({day})" for a, day in outside[:10])
-    more = f" and {len(outside) - 10} more" if len(outside) > 10 else ""
+def timezone_conflicts(days: Iterable[DayDocument], timezone: str) -> list[tuple[str, str, str]]:
+    """Timed activities whose start would land on another day in ``timezone``."""
+    conflicts = []
+    for day in days:
+        for activity in day.activities:
+            if activity.time is not None:
+                on = local_date(activity.time.start_at, timezone)
+                if on != day.date:
+                    conflicts.append((activity.id, activity.title, on))
+    return conflicts
+
+
+def timezone_conflict(conflicts: list[tuple[str, str, str]], timezone: str) -> ApiError:
+    listed = ", ".join(f"{aid} '{title}' (would be on {on})" for aid, title, on in conflicts[:10])
     return ApiError(
         409,
-        f"This change would leave {len(outside)} scheduled activit"
-        f"{'y' if len(outside) == 1 else 'ies'} outside the trip ({trip_range}): {listed}{more}. "
-        "Move or unschedule them first (move_activity), then retry.",
+        f"In {timezone}, {len(conflicts)} timed activit"
+        f"{'y' if len(conflicts) == 1 else 'ies'} would start on a different day: {listed}. "
+        "Times are kept as instants (UTC). Move those activities (move_activity) or change "
+        "their times first.",
         errors=[
-            {"path": f"activities.{a.id}", "message": f"'{a.title}' is on {day}"}
-            for a, day in outside
+            {"path": f"activities.{aid}", "message": f"'{title}' would start on {on}"}
+            for aid, title, on in conflicts
         ],
     )

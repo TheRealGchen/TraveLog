@@ -7,10 +7,19 @@ from fastapi import Header, Path, Request, Response
 
 from ..db import Database
 from ..errors import ApiError, not_found
-from ..models import Activity, Problem, Trip, TripResponse
-from ..repository import activities as activity_repo
+from ..models import (
+    Activity,
+    ActivityDocument,
+    Day,
+    DayDocument,
+    Problem,
+    Trip,
+    TripResponse,
+    utc_now,
+)
+from ..repository import days as day_repo
 from ..repository import trips as trip_repo
-from ..scheduling import countdown
+from ..scheduling import countdown, day_number, in_trip, sort_key_in_day, trip_days
 
 
 def get_db(request: Request) -> Database:
@@ -22,6 +31,15 @@ TripId = Annotated[
 ]
 TravelerId = Annotated[str, Path(alias="travelerId", description="Traveler ID (`trv_...`).")]
 ActivityId = Annotated[str, Path(alias="activityId", description="Activity ID (`act_...`).")]
+DayDate = Annotated[
+    str,
+    Path(
+        alias="date",
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="The day (YYYY-MM-DD, trip timezone); must be within the trip.",
+        examples=["2027-04-03"],
+    ),
+]
 IfMatch = Annotated[
     str | None,
     Header(
@@ -64,9 +82,59 @@ def trip_response(trip: Trip, response: Response | None = None) -> TripResponse:
     return TripResponse(**trip.model_dump(by_alias=False), days_until_start=days, status=status)
 
 
+def to_activity(trip_id: str, date: str, activity: ActivityDocument) -> Activity:
+    return Activity.model_validate({**activity.model_dump(), "tripId": trip_id, "date": date})
+
+
 def activity_response(activity: Activity, response: Response) -> Activity:
     response.headers["ETag"] = etag(activity.updated_at)
     return activity
+
+
+def day_response(trip: Trip, day: DayDocument, response: Response | None = None) -> Day:
+    if response is not None:
+        response.headers["ETag"] = etag(day.updated_at)
+    return Day(
+        trip_id=trip.id,
+        date=day.date,
+        day_number=day_number(trip, day.date),
+        lodging=day.lodging,
+        start_location=day.start_location,
+        activities=[
+            to_activity(trip.id, day.date, a) for a in sorted(day.activities, key=sort_key_in_day)
+        ],
+        created_at=day.created_at,
+        updated_at=day.updated_at,
+    )
+
+
+def day_not_found(trip: Trip, date: str) -> ApiError:
+    return not_found(
+        f"Trip {trip.id} has no day {date}; it runs from {trip.start_date} to {trip.end_date}."
+    )
+
+
+async def load_day(db: Database, trip: Trip, date: str) -> DayDocument:
+    """The stored day, creating it if the trip predates day documents."""
+    if not in_trip(trip, date):
+        raise day_not_found(trip, date)
+    day = await day_repo.get(db, trip.id, date)
+    if day is None:
+        await day_repo.insert_missing(db, trip.id, [date], utc_now())
+        day = await day_repo.get(db, trip.id, date)
+    assert day is not None
+    return day
+
+
+async def load_days(db: Database, trip: Trip) -> list[DayDocument]:
+    """Every day of the trip in order, creating any that are missing (lazy migration)."""
+    stored = {d.date: d for d in await day_repo.list_for_trip(db, trip.id)}
+    expected = trip_days(trip.start_date, trip.end_date)
+    missing = [d for d in expected if d not in stored]
+    if missing:
+        await day_repo.insert_missing(db, trip.id, missing, utc_now())
+        stored = {d.date: d for d in await day_repo.list_for_trip(db, trip.id)}
+    return [stored[d] for d in expected if d in stored]
 
 
 def trip_not_found(trip_id: str) -> ApiError:
@@ -106,15 +174,23 @@ async def trip_write_failed(
     return concurrent_change(f"Trip {trip_id}")
 
 
-async def activity_write_failed(
-    db: Database, trip_id: str, activity_id: str, if_match: list[datetime] | None
-) -> ApiError:
-    current = await activity_repo.get(db, trip_id, activity_id)
-    if current is None:
-        return activity_not_found(trip_id, activity_id)
-    if if_match is not None and current.updated_at not in if_match:
-        return stale(etag(current.updated_at), current)
-    return concurrent_change(f"Activity {activity_id}")
+def check_travelers(ids: list[str], trip: Trip) -> list[str]:
+    """Deduplicate traveler IDs and make sure each one is on the trip."""
+    known = {t.id for t in trip.travelers}
+    errors = [
+        {
+            "path": f"body.travelerIds.{i}",
+            "message": (
+                f"traveler {tid} is not on trip {trip.id} (travelers on this trip: "
+                f"{', '.join(sorted(known)) or 'none'}); add them with add_traveler first"
+            ),
+        }
+        for i, tid in enumerate(ids)
+        if tid not in known
+    ]
+    if errors:
+        raise ApiError(422, "; ".join(e["message"] for e in errors), errors=errors)
+    return list(dict.fromkeys(ids))
 
 
 def concurrent_change(what: str) -> ApiError:

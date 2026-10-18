@@ -19,7 +19,7 @@ export interface paths {
         put?: never;
         /**
          * Create a trip
-         * @description Creates a trip with no travelers. Returns the new trip and its ETag.
+         * @description Creates a trip with no travelers and one empty day per date. Returns the new trip and its ETag.
          */
         post: operations["create_trip"];
         delete?: never;
@@ -37,43 +37,23 @@ export interface paths {
         };
         /**
          * Get a trip
-         * @description The trip with its travelers and countdown. Activities are fetched separately with `list_activities` or `get_itinerary`.
+         * @description The trip with its travelers and countdown. Its days (lodging, start location, activities) are fetched with `list_days`.
          */
         get: operations["get_trip"];
         put?: never;
         post?: never;
         /**
          * Delete a trip
-         * @description Deletes the trip, its travelers, and all of its activities. Returns 204.
+         * @description Deletes the trip with its travelers, days, and activities. Returns 204.
          */
         delete: operations["delete_trip"];
         options?: never;
         head?: never;
         /**
          * Update a trip
-         * @description Partial update: only the fields you send change. Changing `timezone` keeps activity instants (UTC) and recomputes the day of each timed activity. Rejected with 409 if new dates or a new timezone would put a scheduled activity outside the trip.
+         * @description Partial update: only the fields you send change. New dates add empty days and remove days that fall outside the range; removing a day that still has plans is rejected with 409. Changing `timezone` keeps activity times as instants (UTC); it is rejected with 409 if a timed activity would then start on a different day.
          */
         patch: operations["update_trip"];
-        trace?: never;
-    };
-    "/v1/trips/{tripId}/itinerary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get the day-by-day itinerary
-         * @description One entry per day from startDate to endDate (including empty days), each with its activities sorted by startAt (all-day ones last), plus the unscheduled activities. Days are in the trip's timezone; times are UTC.
-         */
-        get: operations["get_itinerary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/v1/trips/{tripId}/travelers": {
@@ -120,6 +100,70 @@ export interface paths {
         patch: operations["update_traveler"];
         trace?: never;
     };
+    "/v1/trips/{tripId}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the trip's days
+         * @description Every day from startDate to endDate, in order, each with its lodging, start location, and activities (sorted by start time; untimed activities last). Days are in the trip's timezone; times are UTC.
+         */
+        get: operations["list_days"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trips/{tripId}/days/{date}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one day
+         * @description The day with its lodging, start location, and activities. Returns an ETag.
+         */
+        get: operations["get_day"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a day
+         * @description Sets where the travelers stay that night (`lodging`) and where the day starts (`startLocation`). Only the fields you send change; null clears one. Returns the day.
+         */
+        patch: operations["update_day"];
+        trace?: never;
+    };
+    "/v1/trips/{tripId}/days/{date}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add an activity to a day
+         * @description Creates an activity on this day. With `time`, `startAt` must fall on this day in the trip's timezone. Returns the new activity (201) and its ETag.
+         */
+        post: operations["add_activity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/trips/{tripId}/activities": {
         parameters: {
             query?: never;
@@ -129,15 +173,11 @@ export interface paths {
         };
         /**
          * List a trip's activities
-         * @description All activities of the trip, optionally filtered. Sorted by date and start time, with unscheduled activities last.
+         * @description Activities across all days of the trip, optionally filtered, ordered by day and then start time. To see a day with its lodging, use `get_day` or `list_days`.
          */
         get: operations["list_activities"];
         put?: never;
-        /**
-         * Add an activity
-         * @description Creates an activity. Without `schedule` it is an unscheduled idea; with only `schedule.date` it is all-day; with `schedule.startAt` it is timed and its date is derived from startAt in the trip's timezone. Dates must fall within the trip.
-         */
-        post: operations["add_activity"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -151,7 +191,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get an activity */
+        /**
+         * Get an activity
+         * @description One activity, including the `date` of the day it is on. Returns an ETag.
+         */
         get: operations["get_activity"];
         put?: never;
         post?: never;
@@ -161,7 +204,7 @@ export interface paths {
         head?: never;
         /**
          * Update an activity
-         * @description Partial update: only the fields you send change. `schedule` and `location` are replaced as a whole. If the schedule changes and `status` is not sent, an `idea` that gets a date becomes `planned` and a `planned` activity that loses its date becomes `idea`.
+         * @description Partial update: only the fields you send change. `time` and `location` are replaced as a whole; null clears them. A new `time.startAt` must fall on the activity's day; use `move_activity` to change the day.
          */
         patch: operations["update_activity"];
         trace?: never;
@@ -177,7 +220,7 @@ export interface paths {
         put?: never;
         /**
          * Move an activity to another day
-         * @description Moves an activity to `date` (or unschedules it with `date: null`). Without `startAt`, each time of day is kept, in the trip's timezone, on the new day. With `startAt`, the new times are used and an omitted `endAt` keeps the duration. An `idea` moved onto a day becomes `planned`; a `planned` activity that is unscheduled becomes `idea`.
+         * @description Moves an activity to `date`. Without `startAt`, each time of day is kept, in the trip's timezone, on the new day. With `startAt` (on the new day), the new times are used and an omitted `endAt` keeps the duration.
          */
         post: operations["move_activity"];
         delete?: never;
@@ -192,7 +235,7 @@ export interface components {
     schemas: {
         /**
          * Activity
-         * @description An activity, stored as its own document in the `activities` collection.
+         * @description An activity on one day of a trip.
          */
         Activity: {
             /**
@@ -202,15 +245,15 @@ export interface components {
              */
             id: string;
             /**
-             * Schema version
-             * @description Version of the stored document shape.
-             */
-            schemaVersion: number;
-            /**
              * Trip id
-             * @description ID of the trip this activity belongs to.
+             * @description ID of the trip.
              */
             tripId: string;
+            /**
+             * Date
+             * @description The day (YYYY-MM-DD, trip timezone) this activity is on.
+             */
+            date: string;
             /**
              * Title
              * @description What the activity is.
@@ -219,12 +262,15 @@ export interface components {
             title: string;
             /**
              * Status
-             * @description `idea`, `planned`, or `done`.
+             * @description `idea` (maybe), `planned`, or `done`.
              * @enum {string}
              */
             status: "idea" | "planned" | "done";
-            /** @description When the activity happens. */
-            schedule: components["schemas"]["Schedule"];
+            /**
+             * Time
+             * @description Start and end time (UTC), or null for an activity with no fixed time.
+             */
+            time: components["schemas"]["ActivityTime"] | null;
             /**
              * Location
              * @description Where the activity happens, or null.
@@ -249,7 +295,7 @@ export interface components {
             /**
              * Updated at
              * Format: date-time
-             * @description When the activity was last changed (UTC). The ETag is derived from this.
+             * @description When the activity was last changed (UTC). Its ETag is derived from this.
              */
             updatedAt: string;
         };
@@ -260,13 +306,50 @@ export interface components {
         ActivityList: {
             /**
              * Activities
-             * @description Matching activities: scheduled ones by date then start time (all-day after timed ones on the same day), then unscheduled ones by creation time.
+             * @description Matching activities by day, then start time (untimed ones last in a day).
              */
             activities: components["schemas"]["Activity"][];
         };
         /**
+         * ActivityTime
+         * @description When a timed activity happens (UTC). An activity without times has `time: null`.
+         */
+        ActivityTime: {
+            /**
+             * Start at
+             * Format: date-time
+             * @description Start time (UTC). Falls on the activity's day.
+             */
+            startAt: string;
+            /**
+             * End at
+             * @description End time (UTC), or null if open-ended.
+             */
+            endAt: string | null;
+        };
+        /**
+         * ActivityTimeInput
+         * @description Start and optional end of an activity.
+         *
+         *     Send ISO 8601 timestamps with an offset or Z, e.g. `2027-04-03T10:00:00+09:00`. `startAt`
+         *     must fall on the activity's day in the trip's timezone; `endAt` may be on a later day.
+         */
+        ActivityTimeInput: {
+            /**
+             * Start at
+             * Format: date-time
+             * @description Start time, ISO 8601 with an offset or Z, e.g. 2027-04-03T10:00:00+09:00.
+             */
+            startAt: string;
+            /**
+             * End at
+             * @description End time, ISO 8601 with an offset or Z. Must be after startAt.
+             */
+            endAt?: string | null;
+        };
+        /**
          * AddActivityRequest
-         * @description Body for `add_activity`.
+         * @description Body for `add_activity`. The day comes from the URL.
          */
         AddActivityRequest: {
             /**
@@ -276,10 +359,10 @@ export interface components {
              */
             title: string;
             /**
-             * Schedule
-             * @description When it happens. Omit or send null for an unscheduled idea.
+             * Time
+             * @description Start and optional end. Omit for an activity with no time.
              */
-            schedule?: components["schemas"]["ScheduleInput"] | null;
+            time?: components["schemas"]["ActivityTimeInput"] | null;
             /**
              * Location
              * @description Where it happens.
@@ -292,9 +375,10 @@ export interface components {
             notes?: string | null;
             /**
              * Status
-             * @description Defaults to `planned` if the activity has a date, otherwise `idea`.
+             * @description `idea`, `planned`, or `done`. Defaults to `planned`.
+             * @enum {string}
              */
-            status?: ("idea" | "planned" | "done") | null;
+            status?: "idea" | "planned" | "done";
             /**
              * Traveler ids
              * @description IDs of travelers on this trip who take part.
@@ -355,10 +439,58 @@ export interface components {
             timezone: string;
         };
         /**
-         * Itinerary
-         * @description Response of `get_itinerary`: the trip laid out day by day.
+         * Day
+         * @description One calendar day of a trip, with where you sleep, where you start, and what you do.
          */
-        Itinerary: {
+        Day: {
+            /**
+             * Trip id
+             * @description ID of the trip.
+             */
+            tripId: string;
+            /**
+             * Date
+             * @description The day (YYYY-MM-DD) in the trip's timezone.
+             */
+            date: string;
+            /**
+             * Day number
+             * @description 1 for the trip's first day, 2 for the second, and so on.
+             */
+            dayNumber: number;
+            /**
+             * Lodging
+             * @description Where the travelers stay that night, or null if not decided.
+             */
+            lodging: components["schemas"]["Location"] | null;
+            /**
+             * Start location
+             * @description Where the day starts, or null (usually the previous night's lodging).
+             */
+            startLocation: components["schemas"]["Location"] | null;
+            /**
+             * Activities
+             * @description The day's activities, by start time; activities with no time come last.
+             */
+            activities: components["schemas"]["Activity"][];
+            /**
+             * Created at
+             * Format: date-time
+             * @description When the day was created (UTC).
+             */
+            createdAt: string;
+            /**
+             * Updated at
+             * Format: date-time
+             * @description When the day or any of its activities last changed (UTC). The day's ETag is derived from this.
+             */
+            updatedAt: string;
+        };
+        /**
+         * DayList
+         * @description Response of `list_days`: the whole trip, day by day.
+         */
+        DayList: {
             /**
              * Trip id
              * @description Trip ID.
@@ -392,39 +524,13 @@ export interface components {
             status: "upcoming" | "ongoing" | "past";
             /**
              * Days
-             * @description Every day from startDate to endDate, including days with no activities.
+             * @description Every day from startDate to endDate, in order.
              */
-            days: components["schemas"]["ItineraryDay"][];
-            /**
-             * Unscheduled
-             * @description Activities with no date, oldest first.
-             */
-            unscheduled: components["schemas"]["Activity"][];
-        };
-        /**
-         * ItineraryDay
-         * @description One calendar day of the trip.
-         */
-        ItineraryDay: {
-            /**
-             * Date
-             * @description The day (YYYY-MM-DD) in the trip's timezone.
-             */
-            date: string;
-            /**
-             * Day number
-             * @description 1 for the trip's first day, 2 for the second, and so on.
-             */
-            dayNumber: number;
-            /**
-             * Activities
-             * @description Activities on this day, by startAt; all-day activities (no startAt) last.
-             */
-            activities: components["schemas"]["Activity"][];
+            days: components["schemas"]["Day"][];
         };
         /**
          * Location
-         * @description Where an activity happens.
+         * @description A place.
          */
         Location: {
             /**
@@ -438,20 +544,20 @@ export interface components {
          * MoveActivityRequest
          * @description Body for `move_activity`.
          *
-         *     - `date: null` unschedules the activity (and clears its times).
          *     - `date` alone keeps each time of day, in the trip's timezone, on the new day.
-         *     - `date` with `startAt` (and optionally `endAt`) sets new times; an omitted `endAt` keeps the
-         *       previous duration, and `endAt: null` clears it.
+         *     - `date` with `startAt` (and optionally `endAt`) sets new times; an omitted `endAt` keeps
+         *       the previous duration, and `endAt: null` clears it.
          */
         MoveActivityRequest: {
             /**
              * Date
-             * @description New day (YYYY-MM-DD, trip timezone, within the trip), or null to unschedule.
+             * @description Target day (YYYY-MM-DD, trip timezone, within the trip).
+             * @example 2027-04-03
              */
-            date: string | null;
+            date: string;
             /**
              * Start at
-             * @description New start time, ISO 8601 with an offset or Z.
+             * @description New start time on the target day, ISO 8601 with an offset or Z.
              */
             startAt?: string | null;
             /**
@@ -513,52 +619,6 @@ export interface components {
              * @description What is wrong and how to fix it.
              */
             message: string;
-        };
-        /**
-         * Schedule
-         * @description When an activity happens. All null means unscheduled.
-         */
-        Schedule: {
-            /**
-             * Date
-             * @description Calendar day (YYYY-MM-DD) in the trip's timezone, or null if unscheduled. Derived from startAt when startAt is set.
-             */
-            date: string | null;
-            /**
-             * Start at
-             * @description Start time (UTC), or null for all-day.
-             */
-            startAt: string | null;
-            /**
-             * End at
-             * @description End time (UTC), or null.
-             */
-            endAt: string | null;
-        };
-        /**
-         * ScheduleInput
-         * @description When an activity happens. Omitted fields are null; all null means unscheduled.
-         *
-         *     - Only `date`: an all-day activity on that day.
-         *     - `startAt` (and optionally `endAt`): a timed activity; `date` is derived from `startAt` in
-         *       the trip's timezone, so you can omit it. If you send it, it must agree.
-         */
-        ScheduleInput: {
-            /**
-             * Date
-             * @description Calendar day (YYYY-MM-DD) in the trip's timezone; must be within the trip.
-             */
-            date?: string | null;
-            /**
-             * Start at
-             * @description Start time, ISO 8601 with an offset or Z, e.g. 2027-04-03T10:00:00+09:00.
-             */
-            startAt?: string | null;
-            /**
-             * End at
-             * @description End time, ISO 8601 with an offset or Z. Requires startAt and must be later.
-             */
-            endAt?: string | null;
         };
         /**
          * Traveler
@@ -746,11 +806,10 @@ export interface components {
         /**
          * UpdateActivityRequest
          * @description Body for `update_activity`. Only the fields you send are changed; send null to clear
-         *     `location` or `notes`.
+         *     `time`, `location`, or `notes`.
          *
-         *     `schedule` and `location` are replaced as a whole: send the complete object. Send
-         *     `"schedule": null` to unschedule. To move an activity to another day while keeping its
-         *     times of day, use `move_activity`.
+         *     `time` and `location` are replaced as a whole. To move the activity to another day, use
+         *     `move_activity`.
          */
         UpdateActivityRequest: {
             /**
@@ -759,10 +818,10 @@ export interface components {
              */
             title?: string;
             /**
-             * Schedule
-             * @description Replaces the whole schedule; null unschedules the activity.
+             * Time
+             * @description Replaces the times; null makes the activity untimed.
              */
-            schedule?: components["schemas"]["ScheduleInput"] | null;
+            time?: components["schemas"]["ActivityTimeInput"] | null;
             /**
              * Location
              * @description Replaces the location; null clears it.
@@ -784,6 +843,22 @@ export interface components {
              * @description Replaces the list of travelers taking part. Cannot be null.
              */
             travelerIds?: string[];
+        };
+        /**
+         * UpdateDayRequest
+         * @description Body for `update_day`. Only the fields you send are changed; null clears a field.
+         */
+        UpdateDayRequest: {
+            /**
+             * Lodging
+             * @description Where the travelers stay that night; null clears it.
+             */
+            lodging?: components["schemas"]["Location"] | null;
+            /**
+             * Start location
+             * @description Where the day starts; null clears it.
+             */
+            startLocation?: components["schemas"]["Location"] | null;
         };
         /**
          * UpdateTravelerRequest
@@ -1114,56 +1189,6 @@ export interface operations {
             };
         };
     };
-    get_itinerary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Trip ID (`trip_...`). */
-                tripId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Itinerary"];
-                };
-            };
-            /** @description Missing or invalid bearer token. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description A trip, traveler, or activity ID in the path does not exist. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description The request is invalid; `errors` lists each problem with its path. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     add_traveler: {
         parameters: {
             query?: never;
@@ -1368,18 +1393,9 @@ export interface operations {
             };
         };
     };
-    list_activities: {
+    list_days: {
         parameters: {
-            query?: {
-                /** @description Only activities on this day (YYYY-MM-DD, trip timezone). */
-                date?: string | null;
-                /** @description `true`: only activities with no date. `false`: only scheduled ones. */
-                unscheduled?: boolean | null;
-                /** @description Only activities with this traveler. */
-                travelerId?: string | null;
-                /** @description Only activities with this status. */
-                status?: ("idea" | "planned" | "done") | null;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Trip ID (`trip_...`). */
@@ -1395,7 +1411,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ActivityList"];
+                    "application/json": components["schemas"]["DayList"];
                 };
             };
             /** @description Missing or invalid bearer token. */
@@ -1427,6 +1443,130 @@ export interface operations {
             };
         };
     };
+    get_day: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+                /** @description The day (YYYY-MM-DD, trip timezone); must be within the trip. */
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Day"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_day: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+                /** @description The day (YYYY-MM-DD, trip timezone); must be within the trip. */
+                date: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Day"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     add_activity: {
         parameters: {
             query?: never;
@@ -1434,6 +1574,8 @@ export interface operations {
             path: {
                 /** @description Trip ID (`trip_...`). */
                 tripId: string;
+                /** @description The day (YYYY-MM-DD, trip timezone); must be within the trip. */
+                date: string;
             };
             cookie?: never;
         };
@@ -1452,6 +1594,63 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Activity"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_activities: {
+        parameters: {
+            query?: {
+                /** @description Only activities on this day (YYYY-MM-DD, trip timezone). */
+                date?: string | null;
+                /** @description Only activities with this traveler. */
+                travelerId?: string | null;
+                /** @description Only activities with this status. */
+                status?: ("idea" | "planned" | "done") | null;
+            };
+            header?: never;
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityList"];
                 };
             };
             /** @description Missing or invalid bearer token. */
@@ -1579,6 +1778,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description The change conflicts with other data (the detail says what to fix). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description If-Match did not match the current ETag; `current` holds the current version. */
             412: {
                 headers: {
@@ -1642,6 +1850,15 @@ export interface operations {
             };
             /** @description A trip, traveler, or activity ID in the path does not exist. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The change conflicts with other data (the detail says what to fix). */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -5,9 +5,11 @@ import { test } from "node:test";
 
 import {
   countdownLabel,
+  dateParts,
   formatDateOnly,
   formatDateRange,
   formatDayHeader,
+  formatLongDate,
   formatTimeRange,
   localRangeToUtc,
   localToUtc,
@@ -56,7 +58,7 @@ test("an end time before the start time is on the next day", () => {
 
 test("time ranges", () => {
   const tz = "Asia/Tokyo";
-  assert.equal(formatTimeRange(null, null, tz), "All day");
+  assert.equal(formatTimeRange(null, null, tz), "Any time");
   assert.equal(formatTimeRange("2027-04-03T01:00:00.000Z", null, tz), "10:00");
   assert.equal(
     formatTimeRange("2027-04-03T01:00:00.000Z", "2027-04-03T03:00:00.000Z", tz),
@@ -73,6 +75,8 @@ test("calendar dates never shift", () => {
   assert.equal(d.getDate(), 4);
   assert.equal(formatDateOnly(d), "2027-04-04");
   assert.equal(formatDayHeader(3, "2027-04-04"), "Day 3, Sun Apr 4");
+  assert.equal(formatLongDate("2027-04-04"), "Sunday, April 4, 2027");
+  assert.deepEqual(dateParts("2027-04-04"), { weekday: "Sun", day: "4", month: "Apr" });
   assert.equal(formatDateRange("2027-04-02", "2027-04-14"), "Apr 2 – 14, 2027");
   assert.equal(formatDateRange("2027-04-28", "2027-05-03"), "Apr 28 – May 3, 2027");
   assert.equal(formatDateRange("2027-12-30", "2028-01-02"), "Dec 30, 2027 – Jan 2, 2028");

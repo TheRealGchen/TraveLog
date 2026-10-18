@@ -16,30 +16,31 @@
 ## Time rules (important)
 
 - Every trip has an IANA `timezone` (e.g. `Asia/Tokyo`; default `UTC`).
-- Trip `startDate`/`endDate` and activity `schedule.date` are calendar days (`YYYY-MM-DD`) in the
-  trip's timezone.
-- Timestamps (`schedule.startAt`, `schedule.endAt`, `createdAt`, `updatedAt`) must be sent as
-  ISO 8601 WITH an offset or `Z`, e.g. `2027-04-03T10:00:00+09:00` for 10:00 in Tokyo. A
-  timestamp without an offset is rejected. Responses are always UTC with `Z`
+- Trip `startDate`/`endDate` and day `date`s are calendar days (`YYYY-MM-DD`) in the trip's
+  timezone.
+- Timestamps (`time.startAt`, `time.endAt`, `createdAt`, `updatedAt`) must be sent as ISO 8601
+  WITH an offset or `Z`, e.g. `2027-04-03T10:00:00+09:00` for 10:00 in Tokyo. A timestamp
+  without an offset is rejected. Responses are always UTC with `Z`
   (`2027-04-03T01:00:00.000Z`); convert with the trip's timezone to show local time.
-- When `startAt` is set, `date` is derived from it, so you may omit `date`.
-- `endAt` needs `startAt` and must be later.
-- Activity days must fall within the trip's dates.
+- An activity's `startAt` must fall on its day in the trip's timezone. `endAt` must be later
+  (it may be after midnight).
 - `daysUntilStart` is computed from today in the trip's timezone (0 on the first day,
   negative once started). Trip `status` is `upcoming`, `ongoing`, or `past`.
 
 ## Data model
 
+A trip is a collection of days; each day holds that day's activities.
+
 - Trip: `id, name, destination, timezone, startDate, endDate, travelers[], ownerId,
   schemaVersion, createdAt, updatedAt` (+ computed `daysUntilStart`, `status`).
 - Traveler (inside a trip): `id, name, color` (`#rrggbb`; assigned from a palette if omitted).
-- Activity: `id, tripId, title, status (idea|planned|done), schedule {date, startAt, endAt},
-  location {name} | null, notes | null, travelerIds[], schemaVersion, createdAt, updatedAt`.
-  - Unscheduled idea: `schedule.date` null.
-  - All-day: `date` set, no times.
-  - Timed: `startAt` (and maybe `endAt`) set.
-  - Default status: `planned` if it has a date, else `idea`. Scheduling an `idea` (or
-    unscheduling a `planned` activity) flips the status unless you set it explicitly.
+- Day: `tripId, date, dayNumber, lodging {name} | null` (where you sleep that night),
+  `startLocation {name} | null` (where the day starts), `activities[], createdAt, updatedAt`.
+  There is exactly one day per date from startDate to endDate; days are created and removed
+  with the trip's dates.
+- Activity (always on a day): `id, tripId, date, title, status (idea|planned|done, default
+  planned), time {startAt, endAt|null} | null, location {name} | null, notes | null,
+  travelerIds[], createdAt, updatedAt`. `time: null` means no fixed time.
 
 ## Operations (operationId: method path)
 
@@ -48,9 +49,13 @@ Trips
 - create_trip: POST /v1/trips  {name, startDate, endDate, destination?, timezone?}
 - get_trip: GET /v1/trips/{tripId}
 - update_trip: PATCH /v1/trips/{tripId}  (any of name, destination, timezone, startDate, endDate)
-- delete_trip: DELETE /v1/trips/{tripId}  (also deletes its activities)
-- get_itinerary: GET /v1/trips/{tripId}/itinerary  (every day of the trip, with activities sorted
-  by start time, plus `unscheduled`)
+- delete_trip: DELETE /v1/trips/{tripId}  (also deletes its days and activities)
+
+Days
+- list_days: GET /v1/trips/{tripId}/days  (every day with lodging, start location, and
+  activities sorted by start time)
+- get_day: GET /v1/trips/{tripId}/days/{date}
+- update_day: PATCH /v1/trips/{tripId}/days/{date}  {lodging?, startLocation?}  (null clears)
 
 Travelers (each returns the updated trip)
 - add_traveler: POST /v1/trips/{tripId}/travelers  {name, color?}  (new traveler is last)
@@ -58,23 +63,24 @@ Travelers (each returns the updated trip)
 - remove_traveler: DELETE /v1/trips/{tripId}/travelers/{travelerId}  (also removed from activities)
 
 Activities
-- list_activities: GET /v1/trips/{tripId}/activities?date=&unscheduled=&travelerId=&status=
-- add_activity: POST /v1/trips/{tripId}/activities  {title, schedule?, location?, notes?, status?, travelerIds?}
+- add_activity: POST /v1/trips/{tripId}/days/{date}/activities  {title, time?, location?, notes?, status?, travelerIds?}
+- list_activities: GET /v1/trips/{tripId}/activities?date=&travelerId=&status=
 - get_activity: GET /v1/trips/{tripId}/activities/{activityId}
 - update_activity: PATCH /v1/trips/{tripId}/activities/{activityId}  (send only what changes;
-  `schedule` and `location` are replaced whole; `null` clears notes/location/schedule)
+  `time` and `location` are replaced whole; `null` clears time/location/notes)
 - move_activity: POST /v1/trips/{tripId}/activities/{activityId}/move  {date, startAt?, endAt?}
-  (date only: keeps the local times of day on the new day; `date: null` unschedules)
+  (date only: keeps the local times of day on the new day)
 - delete_activity: DELETE /v1/trips/{tripId}/activities/{activityId}
 
 ## Common workflows
 
-1. Plan a trip: create_trip -> add_traveler (once per person) -> add_activity for each idea or
-   booking -> get_itinerary to review the day-by-day plan.
+1. Plan a trip: create_trip -> add_traveler (once per person) -> update_day to set lodging for
+   each night -> add_activity on each day -> list_days to review the plan.
 2. Reschedule: move_activity with a new `date` (keeps times) or with `startAt`/`endAt`.
-3. Capture ideas first: add_activity without `schedule`; later move_activity onto a day.
-4. Mark something done: update_activity {"status": "done"}.
-5. Assign people: update_activity {"travelerIds": ["trv_..."]} (IDs from get_trip).
+3. Mark something done: update_activity {"status": "done"}.
+4. Assign people: update_activity {"travelerIds": ["trv_..."]} (IDs from get_trip).
+5. Shorten a trip: move activities off the days being dropped and clear their lodging, then
+   update_trip with the new dates.
 
 ## Safe concurrent edits
 
@@ -86,6 +92,7 @@ get_trip, get_activity, and every mutation return an `ETag` header. Send it back
 
 Errors use `application/problem+json`: `{type, title, status, detail, errors?}`. `detail` says
 exactly what to fix; validation failures (422) list each `{path, message}`, e.g.
-`body.schedule.endAt: endAt must be after startAt (got ... and ...)`. Unknown IDs give 404
-naming the missing ID. 409 means the change conflicts with other data (for example shrinking a
-trip would strand scheduled activities: move or unschedule them first).
+`body.time: endAt must be after startAt (got ... and ...)`. Unknown IDs give 404
+naming the missing ID (a date outside the trip is a 404 too). 409 means the change conflicts
+with other data: shrinking a trip would drop days that still have plans, or a new timezone
+would make a timed activity start on another day. The detail lists what to fix first.

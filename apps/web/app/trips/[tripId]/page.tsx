@@ -1,15 +1,12 @@
 "use client";
 
-import { ArrowLeftIcon, PlusIcon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
 
-import { ActivityDialog, type ActivityDialogTarget } from "@/components/activity-dialog";
-import { ItineraryTab } from "@/components/itinerary-tab";
+import { DaysTab } from "@/components/days-tab";
 import { ThingsToDoTab } from "@/components/things-to-do-tab";
 import { TripHeader } from "@/components/trip-header";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, errorMessage } from "@/lib/api";
@@ -18,10 +15,9 @@ import { useTrip } from "@/lib/queries";
 export default function TripPage() {
   const { tripId } = useParams<{ tripId: string }>();
   const trip = useTrip(tripId);
-  const [dialog, setDialog] = useState<ActivityDialogTarget | null>(null);
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
       <Link
         href="/"
         className="mb-8 inline-flex items-center gap-1.5 rounded-md text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -52,32 +48,18 @@ export default function TripPage() {
       {trip.data && (
         <>
           <TripHeader trip={trip.data} />
-          <Tabs defaultValue="itinerary" className="mt-10">
-            <div className="flex items-center justify-between gap-3">
-              <TabsList>
-                <TabsTrigger value="itinerary">Itinerary</TabsTrigger>
-                <TabsTrigger value="todo">Things to do</TabsTrigger>
-              </TabsList>
-              <Button onClick={() => setDialog({ mode: "create", date: null })}>
-                <PlusIcon />
-                Add activity
-              </Button>
-            </div>
-            <TabsContent value="itinerary" className="mt-6">
-              <ItineraryTab
-                trip={trip.data}
-                onOpen={(activity) => setDialog({ mode: "edit", activity })}
-                onAdd={(date) => setDialog({ mode: "create", date })}
-              />
+          <Tabs defaultValue="days" className="mt-10">
+            <TabsList>
+              <TabsTrigger value="days">Days</TabsTrigger>
+              <TabsTrigger value="todo">Things to do</TabsTrigger>
+            </TabsList>
+            <TabsContent value="days" className="mt-6">
+              <DaysTab trip={trip.data} />
             </TabsContent>
             <TabsContent value="todo" className="mt-6">
-              <ThingsToDoTab
-                trip={trip.data}
-                onOpen={(activity) => setDialog({ mode: "edit", activity })}
-              />
+              <ThingsToDoTab trip={trip.data} />
             </TabsContent>
           </Tabs>
-          <ActivityDialog trip={trip.data} target={dialog} onClose={() => setDialog(null)} />
         </>
       )}
     </main>

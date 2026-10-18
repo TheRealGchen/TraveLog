@@ -1,16 +1,17 @@
 from .activity import (
     Activity,
+    ActivityDocument,
     ActivityList,
     ActivityStatus,
+    ActivityTime,
+    ActivityTimeInput,
     AddActivityRequest,
     Location,
     MoveActivityRequest,
-    Schedule,
-    ScheduleInput,
     UpdateActivityRequest,
 )
 from .common import SCHEMA_VERSION, ApiModel, format_utc, utc_now
-from .itinerary import Itinerary, ItineraryDay
+from .day import Day, DayDocument, DayList, UpdateDayRequest
 from .problem import Problem, ProblemError
 from .traveler import TRAVELER_PALETTE, AddTravelerRequest, Traveler, UpdateTravelerRequest
 from .trip import (
@@ -29,20 +30,22 @@ __all__ = [
     "SCHEMA_VERSION",
     "TRAVELER_PALETTE",
     "Activity",
+    "ActivityDocument",
     "ActivityList",
     "ActivityStatus",
+    "ActivityTime",
+    "ActivityTimeInput",
     "AddActivityRequest",
     "AddTravelerRequest",
     "ApiModel",
     "CreateTripRequest",
-    "Itinerary",
-    "ItineraryDay",
+    "Day",
+    "DayDocument",
+    "DayList",
     "Location",
     "MoveActivityRequest",
     "Problem",
     "ProblemError",
-    "Schedule",
-    "ScheduleInput",
     "Traveler",
     "Trip",
     "TripList",
@@ -51,6 +54,7 @@ __all__ = [
     "TripStatus",
     "TripSummary",
     "UpdateActivityRequest",
+    "UpdateDayRequest",
     "UpdateTravelerRequest",
     "UpdateTripRequest",
     "format_utc",

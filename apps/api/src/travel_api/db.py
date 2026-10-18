@@ -13,5 +13,5 @@ def connect(uri: str) -> AsyncMongoClient[dict[str, Any]]:
 
 async def create_indexes(db: Database) -> None:
     await db.trips.create_index([("ownerId", ASCENDING), ("startDate", ASCENDING)])
-    await db.activities.create_index([("tripId", ASCENDING), ("schedule.startAt", ASCENDING)])
-    await db.activities.create_index([("tripId", ASCENDING), ("schedule.date", ASCENDING)])
+    await db.days.create_index([("tripId", ASCENDING), ("date", ASCENDING)])
+    await db.days.create_index([("activities.id", ASCENDING)])

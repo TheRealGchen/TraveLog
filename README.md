@@ -3,6 +3,9 @@
 An API-first travel planner. The web app is a pure client of a public HTTP API, so anything you
 can do in the UI, an AI agent can do through the same API with the same token.
 
+A trip is a collection of days. Each day records where you're staying that night, an optional
+place where the day starts, and that day's activities.
+
 ```
 apps/api         FastAPI + Pydantic + PyMongo (uv project). The only code that touches MongoDB.
 apps/web         Next.js (App Router, client only), Tailwind, shadcn/ui, TanStack Query
@@ -89,10 +92,16 @@ Add a traveler (the response is the trip; the new traveler is last in `travelers
 curl -s -X POST $API/trips/$TRIP/travelers -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name": "Sam"}'
 ```
 
-Add an activity from 10:00 to 12:00 Tokyo time (stored as 01:00Z to 03:00Z; `date` is derived):
+Set where you're staying on April 3 and where the day starts:
 
 ```bash
-curl -s -X POST $API/trips/$TRIP/activities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title": "teamLab Planets", "schedule": {"startAt": "2027-04-03T10:00:00+09:00", "endAt": "2027-04-03T12:00:00+09:00"}, "location": {"name": "Toyosu"}, "travelerIds": ["'$TRAVELER'"]}'
+curl -s -X PATCH $API/trips/$TRIP/days/2027-04-03 -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"lodging": {"name": "Hotel Gracery Shinjuku"}, "startLocation": {"name": "Narita Airport"}}'
+```
+
+Add an activity to that day from 10:00 to 12:00 Tokyo time (stored as 01:00Z to 03:00Z):
+
+```bash
+curl -s -X POST $API/trips/$TRIP/days/2027-04-03/activities -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"title": "teamLab Planets", "time": {"startAt": "2027-04-03T10:00:00+09:00", "endAt": "2027-04-03T12:00:00+09:00"}, "location": {"name": "Toyosu"}, "travelerIds": ["'$TRAVELER'"]}'
 ```
 
 Move it to April 5, keeping 10:00 to 12:00 local time:
@@ -101,10 +110,10 @@ Move it to April 5, keeping 10:00 to 12:00 local time:
 curl -s -X POST $API/trips/$TRIP/activities/$ACTIVITY/move -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"date": "2027-04-05"}'
 ```
 
-Read the day-by-day itinerary (every day of the trip, plus `unscheduled`):
+Read the whole trip day by day (every day with its lodging, start location, and activities):
 
 ```bash
-curl -s $API/trips/$TRIP/itinerary -H "Authorization: Bearer $TOKEN"
+curl -s $API/trips/$TRIP/days -H "Authorization: Bearer $TOKEN"
 ```
 
 Errors are `application/problem+json` and say how to fix the request, for example a timestamp
@@ -115,8 +124,8 @@ without an offset:
   "type": "/problems/validation-error",
   "title": "Validation failed",
   "status": 422,
-  "detail": "1 validation error: body.schedule.startAt: must include a UTC offset or 'Z', for example 2027-04-03T10:00:00+09:00 (got '2027-04-03T10:00:00', which has no offset)",
-  "errors": [{ "path": "body.schedule.startAt", "message": "must include a UTC offset or 'Z', ..." }]
+  "detail": "1 validation error: body.time.startAt: must include a UTC offset or 'Z', for example 2027-04-03T10:00:00+09:00 (got '2027-04-03T10:00:00', which has no offset)",
+  "errors": [{ "path": "body.time.startAt", "message": "must include a UTC offset or 'Z', ..." }]
 }
 ```
 
@@ -151,19 +160,21 @@ Every UI action is exactly one documented API operation; the web app has no othe
 | Open a trip page (header, travelers) | `get_trip` |
 | Edit trip dialog, Save; header date range picker | `update_trip` |
 | Edit trip dialog, Delete trip | `delete_trip` |
-| Itinerary tab | `get_itinerary` |
+| Days tab (the grid of day cards) | `list_days` |
+| Open a day card (day page) | `get_day` |
+| Day page, "Staying tonight" / "Starting from" | `update_day` |
 | Add traveler | `add_traveler` |
 | Traveler chip, Save (name, color) | `update_traveler` |
 | Traveler chip, Remove | `remove_traveler` |
 | Things to do tab and its status and traveler filters | `list_activities` |
-| Add activity / Add on a day / Add idea, then save | `add_activity` |
-| Activity dialog, Save; status picker on a card | `update_activity` |
-| Drag a card to another day or to Unscheduled | `move_activity` |
-| Activity dialog, Delete | `delete_activity` |
+| Day page, "Add an activity…" | `add_activity` |
+| Activity editor, Save; status picker on a card | `update_activity` |
+| Activity editor, Day select | `move_activity` |
+| Activity editor, Delete | `delete_activity` |
 | (agents only) | `get_activity` |
 
-The open trip polls every 10 seconds and refetches on window focus, so changes made by agents
-show up without a reload. Moves and status changes are optimistic and roll back with a toast
+The open trip and day pages poll every 10 seconds and refetch on window focus, so changes made
+by agents show up without a reload. Status changes are optimistic and roll back with a toast
 showing the API's `detail` if they fail.
 
 Design choices and assumptions are in [DECISIONS.md](DECISIONS.md).

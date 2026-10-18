@@ -61,7 +61,7 @@ export function formatTimeRange(
   endAt: string | null,
   timeZone: string,
 ): string {
-  if (!startAt) return "All day";
+  if (!startAt) return "Any time";
   const start = utcToLocalTime(startAt, timeZone);
   if (!endAt) return start;
   const days = differenceInCalendarDays(
@@ -74,6 +74,17 @@ export function formatTimeRange(
 /** "Day 3, Thu Apr 4". */
 export function formatDayHeader(dayNumber: number, date: string): string {
   return `Day ${dayNumber}, ${format(parseDateOnly(date), "EEE MMM d")}`;
+}
+
+/** "Sunday, April 4, 2027". */
+export function formatLongDate(date: string): string {
+  return format(parseDateOnly(date), "EEEE, MMMM d, yyyy");
+}
+
+/** The pieces of a date for a calendar-style badge: { weekday: "Sun", day: "4", month: "Apr" }. */
+export function dateParts(date: string): { weekday: string; day: string; month: string } {
+  const d = parseDateOnly(date);
+  return { weekday: format(d, "EEE"), day: format(d, "d"), month: format(d, "MMM") };
 }
 
 /** "Thu, Apr 4". */

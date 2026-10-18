@@ -1,6 +1,7 @@
 "use client";
 
-import type { Activity, ActivityStatus, Trip } from "@travel/client";
+import type { ActivityStatus, Trip } from "@travel/client";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ActivityCard } from "@/components/activity-card";
@@ -18,13 +19,8 @@ import { useActivities, useSetActivityStatus } from "@/lib/queries";
 
 const ALL = "all";
 
-export function ThingsToDoTab({
-  trip,
-  onOpen,
-}: {
-  trip: Trip;
-  onOpen: (activity: Activity) => void;
-}) {
+export function ThingsToDoTab({ trip }: { trip: Trip }) {
+  const router = useRouter();
   const [status, setStatusFilter] = useState<string>(ALL);
   const [travelerId, setTravelerId] = useState<string>(ALL);
   // Filtering happens in the API (list_activities), not in the browser.
@@ -78,7 +74,7 @@ export function ThingsToDoTab({
       {activities.data && activities.data.activities.length === 0 && (
         <p className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
           {status === ALL && travelerId === ALL
-            ? "Nothing to do yet. Add ideas from the Itinerary tab."
+            ? "Nothing to do yet. Open a day to add activities."
             : "No activities match these filters."}
         </p>
       )}
@@ -90,7 +86,7 @@ export function ThingsToDoTab({
             travelers={trip.travelers}
             timeZone={trip.timezone}
             showDate
-            onOpen={onOpen}
+            onOpen={(a) => router.push(`/trips/${trip.id}/days/${a.date}?activity=${a.id}`)}
             onStatusChange={(s) => setStatus.mutate({ activityId: activity.id, status: s })}
           />
         ))}

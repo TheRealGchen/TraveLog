@@ -8,8 +8,6 @@ from ..ids import new_id
 from ..models import (
     SCHEMA_VERSION,
     CreateTripRequest,
-    Itinerary,
-    ItineraryDay,
     Trip,
     TripList,
     TripResponse,
@@ -19,13 +17,14 @@ from ..models import (
     UpdateTripRequest,
     utc_now,
 )
-from ..repository import activities as activity_repo
+from ..repository import days as day_repo
 from ..repository import trips as trip_repo
 from ..scheduling import (
-    activities_outside_range,
-    conflict_with_activities,
     countdown,
-    sort_key_in_day,
+    day_has_content,
+    days_conflict,
+    timezone_conflict,
+    timezone_conflicts,
     trip_days,
 )
 from .deps import (
@@ -33,6 +32,7 @@ from .deps import (
     IfMatch,
     TripId,
     get_db,
+    load_days,
     load_trip,
     parse_if_match,
     problems,
@@ -105,7 +105,10 @@ async def list_trips(
     "",
     operation_id="create_trip",
     summary="Create a trip",
-    description="Creates a trip with no travelers. Returns the new trip and its ETag.",
+    description=(
+        "Creates a trip with no travelers and one empty day per date. Returns the new trip and "
+        "its ETag."
+    ),
     status_code=status.HTTP_201_CREATED,
     response_model=TripResponse,
     responses={201: {"headers": ETAG_HEADER}, **problems(401, 422)},
@@ -126,6 +129,7 @@ async def create_trip(body: CreateTripRequest, response: Response, db: Db) -> Tr
         updated_at=now,
     )
     await trip_repo.insert(db, trip)
+    await day_repo.insert_missing(db, trip.id, trip_days(trip.start_date, trip.end_date), now)
     response.headers["Location"] = f"/v1/trips/{trip.id}"
     return trip_response(trip, response)
 
@@ -135,8 +139,8 @@ async def create_trip(body: CreateTripRequest, response: Response, db: Db) -> Tr
     operation_id="get_trip",
     summary="Get a trip",
     description=(
-        "The trip with its travelers and countdown. Activities are fetched separately with "
-        "`list_activities` or `get_itinerary`."
+        "The trip with its travelers and countdown. Its days (lodging, start location, "
+        "activities) are fetched with `list_days`."
     ),
     response_model=TripResponse,
     responses={200: {"headers": ETAG_HEADER}, **problems(401, 404)},
@@ -150,9 +154,10 @@ async def get_trip(trip_id: TripId, response: Response, db: Db) -> TripResponse:
     operation_id="update_trip",
     summary="Update a trip",
     description=(
-        "Partial update: only the fields you send change. Changing `timezone` keeps activity "
-        "instants (UTC) and recomputes the day of each timed activity. Rejected with 409 if "
-        "new dates or a new timezone would put a scheduled activity outside the trip."
+        "Partial update: only the fields you send change. New dates add empty days and remove "
+        "days that fall outside the range; removing a day that still has plans is rejected "
+        "with 409. Changing `timezone` keeps activity times as instants (UTC); it is rejected "
+        "with 409 if a timed activity would then start on a different day."
     ),
     response_model=TripResponse,
     responses={200: {"headers": ETAG_HEADER}, **problems(401, 404, 409, 412, 422)},
@@ -183,10 +188,15 @@ async def update_trip(
                     }
                 ],
             )
-        scheduled = await activity_repo.find(db, trip_id, {"schedule.date": {"$ne": None}})
-        outside = activities_outside_range(scheduled, start, end, timezone)
-        if outside:
-            raise conflict_with_activities(outside, f"{start} to {end}, {timezone}")
+        dropped = [
+            d for d in await day_repo.find_outside(db, trip_id, start, end) if day_has_content(d)
+        ]
+        if dropped:
+            raise days_conflict(dropped, start, end)
+        if timezone != current.timezone:
+            conflicts = timezone_conflicts(await load_days(db, current), timezone)
+            if conflicts:
+                raise timezone_conflict(conflicts, timezone)
         # Guard the range check against a concurrent change to the other end of the range.
         if "startDate" not in fields:
             extra_filter["startDate"] = current.start_date
@@ -198,8 +208,9 @@ async def update_trip(
     )
     if trip is None:
         raise await trip_write_failed(db, trip_id, versions)
-    if "timezone" in fields:
-        await activity_repo.recompute_dates(db, trip_id, trip.timezone, now)
+    if {"startDate", "endDate"} & fields.keys():
+        await day_repo.delete_empty_outside(db, trip_id, trip.start_date, trip.end_date)
+        await day_repo.insert_missing(db, trip_id, trip_days(trip.start_date, trip.end_date), now)
     return trip_response(trip, response)
 
 
@@ -207,56 +218,12 @@ async def update_trip(
     "/{tripId}",
     operation_id="delete_trip",
     summary="Delete a trip",
-    description="Deletes the trip, its travelers, and all of its activities. Returns 204.",
+    description="Deletes the trip with its travelers, days, and activities. Returns 204.",
     status_code=status.HTTP_204_NO_CONTENT,
     responses=problems(401, 404),
 )
 async def delete_trip(trip_id: TripId, db: Db) -> Response:
     if not await trip_repo.delete(db, trip_id):
         raise trip_not_found(trip_id)
-    await activity_repo.delete_for_trip(db, trip_id)
+    await day_repo.delete_for_trip(db, trip_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get(
-    "/{tripId}/itinerary",
-    operation_id="get_itinerary",
-    summary="Get the day-by-day itinerary",
-    description=(
-        "One entry per day from startDate to endDate (including empty days), each with its "
-        "activities sorted by startAt (all-day ones last), plus the unscheduled activities. "
-        "Days are in the trip's timezone; times are UTC."
-    ),
-    response_model=Itinerary,
-    responses=problems(401, 404),
-)
-async def get_itinerary(trip_id: TripId, db: Db) -> Itinerary:
-    trip = await load_trip(db, trip_id)
-    activities = await activity_repo.find(db, trip_id)
-    by_day: dict[str, list] = {}
-    unscheduled = []
-    for activity in activities:
-        if activity.schedule.date is None:
-            unscheduled.append(activity)
-        else:
-            by_day.setdefault(activity.schedule.date, []).append(activity)
-    days = [
-        ItineraryDay(
-            date=day,
-            day_number=i + 1,
-            activities=sorted(by_day.get(day, []), key=sort_key_in_day),
-        )
-        for i, day in enumerate(trip_days(trip.start_date, trip.end_date))
-    ]
-    unscheduled.sort(key=lambda a: a.created_at)
-    days_until, trip_status = countdown(trip)
-    return Itinerary(
-        trip_id=trip.id,
-        timezone=trip.timezone,
-        start_date=trip.start_date,
-        end_date=trip.end_date,
-        days_until_start=days_until,
-        status=trip_status,
-        days=days,
-        unscheduled=unscheduled,
-    )

@@ -29,36 +29,54 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **CI** is a GitHub Actions workflow: `make test` (lint, types, contract drift, API tests, web
   unit tests) plus the Playwright smoke test against a MongoDB service.
 
+## Days (the trip as a collection of days)
+
+- **One document per day** in a `days` collection, replacing the `activities` collection.
+  Activities are embedded in their day. The document `_id` is `<tripId>_<date>`, so a trip
+  can't have two documents for the same date. The API addresses days by date and never exposes
+  `_id`.
+- **Days are created with the trip** (one per date). Changing the trip's dates adds the new days
+  and deletes the dropped ones. A trip with no day documents (made before this change) gets
+  them the first time they're read; that is the "migrate on read" path.
+- **No unscheduled activities.** Every activity belongs to a day. Statuses `idea | planned |
+  done` remain (`idea` now means "maybe"), default `planned`, and never change on their own.
+- **The day owns the date.** An activity's `time.startAt` must fall on its day in the trip's
+  timezone (422 otherwise, pointing to `move_activity`); `endAt` may run past midnight.
+- **Range and timezone changes never move or delete plans silently.** `update_trip` returns 409
+  if new dates would drop a day that has lodging, a start location, or activities, or if a new
+  timezone would make a timed activity start on a different day (instants are kept in UTC).
+  The detail lists what to move or clear first.
+- **Activity routes stay flat** (`/trips/{tripId}/activities/{activityId}`) so callers don't need
+  the date to edit an activity; only `add_activity` is nested under a day. Every Activity
+  response includes its `date`. Activity mutations return the activity; `update_day` returns
+  the day.
+- **ETags.** A day's `updatedAt` changes whenever the day or any of its activities changes, and
+  each activity has its own `updatedAt`. Both work with `If-Match`.
+- **Moving across days** writes two documents: it adds the activity to the target day first and
+  then removes it from the source. The removal is conditional on the activity being unchanged;
+  if that fails, the copy is removed and the move retried, up to three times. A crash between
+  the two writes leaves a duplicate, never a lost activity. Moving within a day is one update.
+- **The old `activities` collection is not migrated** (it only held test data). It is no longer
+  read and can be dropped.
+
 ## API behavior
 
-- **Activity days must fall inside the trip** (the plan offered reject or warn): add, update,
-  and move reject an out-of-range day with 422. To keep this an invariant, `update_trip`
-  rejects date or timezone changes that would strand a scheduled activity with **409**, listing
-  each one; move or unschedule them first.
-- **`date` and `startAt` that disagree** (the `startAt` falls on another day in the trip's
-  timezone) are rejected with 422 rather than silently overwritten.
-- **PATCH replaces nested objects.** `schedule` and `location` are replaced as a whole, so a
-  PATCH never needs to read the current value. `"schedule": null` unschedules.
+- **PATCH replaces nested objects.** `time`, `location`, `lodging`, and `startLocation` are
+  replaced as a whole, so a PATCH never needs to read the current value.
 - **PATCH fields that cannot be null** (title, name, status, travelerIds, timezone, dates,
   traveler color) may be omitted but not sent as null; the OpenAPI schema marks them as
-  non-nullable and optional.
-- **Status rules.** New activities default to `planned` with a day and `idea` without one.
-  When a write changes the schedule and does not set `status`, an `idea` that gets a day
-  becomes `planned` and a `planned` activity that loses its day becomes `idea`; `done` never
-  changes on its own.
+  non-nullable and optional. `add_activity`'s `status` works the same way (default `planned`).
 - **`move_activity`.** Without `startAt`, each wall-clock time is kept in the trip's timezone on
   the new day (correct across DST changes). With `startAt` and no `endAt`, the duration is
-  kept; `endAt: null` clears it. `date: null` clears times as well.
-- **Atomic writes.** Every write is one atomic single-document operation (`$set`, `$push` via
-  `$concatArrays`, `$pull`, `arrayFilters`). User-supplied values in pipeline updates are wrapped
-  in `$literal`. Two exceptions, both safe:
-  - `move_activity` must read the current times to compute the new ones. It writes with a
-    compare-and-set on `updatedAt` and retries up to three times, so a concurrent change is
-    never overwritten.
-  - Validation reads (the trip's timezone, travelers, and date range) happen before writes.
+  kept; `endAt: null` clears it.
+- **Atomic writes.** Each write is one atomic single-document operation (`$set`, `$push`,
+  `$pull`, `arrayFilters`; pipeline updates wrap user values in `$literal`). Validation reads
+  (the trip's timezone, travelers, and dates) happen before writes. `move_activity` across days
+  is the one two-document write (see above).
 - **Cross-collection effects are not transactional.** Deleting a trip, removing a traveler, and
-  changing the timezone each touch the trip and then its activities in a second operation.
-  A crash between the two leaves orphans or stale days; acceptable at this scale.
+  changing the dates each touch the trip and then its days in a second operation. A crash
+  between the two leaves orphaned or missing days (missing days are recreated on read);
+  acceptable at this scale.
 - **New travelers get the first palette color not already used on the trip**, cycling when all
   are used, computed in the same atomic update.
 - **Traveler mutations return the whole trip** (the resource that changed); `add_traveler`
@@ -69,7 +87,7 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
   ETags or `*`. A mismatch returns 412 with the current version in the problem's `current`
   member and its `ETag` header. Timestamps are truncated to milliseconds (MongoDB's precision)
   so stored and returned values always match.
-- **Unknown IDs.** Path IDs return 404 naming the ID. A `travelerId` filter on
+- **Unknown IDs.** Path IDs return 404 naming the ID, and so does a date outside the trip. A `travelerId` filter on
   `list_activities` that is not on the trip is also 404; unknown IDs in a request body
   (`travelerIds`) are a 422 validation error with the path of the bad entry.
 - **Problem types** are relative URIs such as `/problems/validation-error`.
@@ -84,18 +102,25 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 
 - **Countdown text** ("12 days to go", "Today!", "In progress", "Completed") is formatting of
   the API's `daysUntilStart` and `status`; the numbers and status come from the API.
-- **End time at or before start time** in the activity dialog is read as the next day
+- **Day cards and day pages.** The trip page shows one large card per day (date, lodging, start
+  location, an activity preview). A card opens `/trips/{tripId}/days/{date}`. There, lodging and
+  start location are always-editable fields that save on Enter or blur. A quick-add box creates
+  an activity from just a title. Activity cards expand in place into an editor instead of
+  opening a modal.
+- **End time at or before start time** in the activity editor is read as the next day
   (22:00 to 01:00).
-- **Dialogs send only changed fields**, so a save doesn't clobber an agent's concurrent edit to
+- **Editors send only changed fields**, so a save doesn't clobber an agent's concurrent edit to
   another field. The UI doesn't send `If-Match`.
 - **Traveler colors** are edited with the native color input; automatic colors are assigned by
   the API.
 - **Status** is shown as a small picker on every card (optimistic `update_activity`), rather
   than a done/undone checkbox, so the UI doesn't need status rules of its own.
-- **Drag and drop** uses dnd-kit with `pointerWithin` collision detection (the drop target is
-  under the pointer) and a 6px activation distance, so a click still opens the dialog.
-- **`get_activity`** isn't used by the UI (the itinerary and lists already include full
-  activities); it exists for agents.
+- **Drag and drop was removed** with the itinerary list. Moving an activity is done with the Day
+  select in its editor (`move_activity`).
+- **Things to do** links each activity to its day page with `?activity=<id>`, which opens that
+  activity's editor.
+- **`get_activity`** isn't used by the UI (days and lists already include full activities); it
+  exists for agents.
 - **Playwright** runs its own API (port 8100, database `travel_planner_e2e`) and a production
   build of the web app (port 3100), with the browser in `America/Los_Angeles` and the trip in
   `Asia/Tokyo`.

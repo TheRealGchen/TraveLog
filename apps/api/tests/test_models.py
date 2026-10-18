@@ -4,11 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from travel_api.models import (
+    ActivityTimeInput,
     AddActivityRequest,
     CreateTripRequest,
     MoveActivityRequest,
-    ScheduleInput,
     UpdateActivityRequest,
+    UpdateDayRequest,
     UpdateTripRequest,
 )
 
@@ -55,33 +56,33 @@ def test_single_day_trip_is_allowed() -> None:
 
 
 def test_offset_timestamp_is_normalized_to_utc() -> None:
-    s = ScheduleInput.model_validate({"startAt": "2027-04-03T10:00:00+09:00"})
+    s = ActivityTimeInput.model_validate({"startAt": "2027-04-03T10:00:00+09:00"})
     assert s.start_at == datetime(2027, 4, 3, 1, 0, tzinfo=UTC)
     assert s.start_at is not None and s.start_at.utcoffset() is not None
     assert s.model_dump(mode="json")["startAt"] == "2027-04-03T01:00:00.000Z"
 
 
 def test_z_timestamp_is_accepted() -> None:
-    s = ScheduleInput.model_validate({"startAt": "2027-04-03T01:00:00Z"})
+    s = ActivityTimeInput.model_validate({"startAt": "2027-04-03T01:00:00Z"})
     assert s.model_dump(mode="json")["startAt"] == "2027-04-03T01:00:00.000Z"
 
 
 def test_timestamp_without_offset_is_rejected_with_explanation() -> None:
     with pytest.raises(ValidationError) as exc:
-        ScheduleInput.model_validate({"startAt": "2027-04-03T10:00:00"})
+        ActivityTimeInput.model_validate({"startAt": "2027-04-03T10:00:00"})
     msg = messages(exc.value)
     assert "startAt" in msg
     assert "must include a UTC offset or 'Z'" in msg
 
 
 def test_timestamps_are_truncated_to_milliseconds() -> None:
-    s = ScheduleInput.model_validate({"startAt": "2027-04-03T01:00:00.123456Z"})
+    s = ActivityTimeInput.model_validate({"startAt": "2027-04-03T01:00:00.123456Z"})
     assert s.start_at is not None and s.start_at.microsecond == 123000
 
 
 def test_end_at_must_be_after_start_at() -> None:
     with pytest.raises(ValidationError) as exc:
-        ScheduleInput.model_validate(
+        ActivityTimeInput.model_validate(
             {"startAt": "2027-04-03T02:00:00Z", "endAt": "2027-04-03T01:00:00Z"}
         )
     assert (
@@ -90,15 +91,21 @@ def test_end_at_must_be_after_start_at() -> None:
     )
 
 
-def test_end_at_requires_start_at() -> None:
+def test_time_requires_start_at() -> None:
     with pytest.raises(ValidationError) as exc:
-        ScheduleInput.model_validate({"date": "2027-04-03", "endAt": "2027-04-03T01:00:00Z"})
+        ActivityTimeInput.model_validate({"endAt": "2027-04-03T01:00:00Z"})
+    assert "startAt" in messages(exc.value)
+
+
+def test_move_end_at_requires_start_at() -> None:
+    with pytest.raises(ValidationError) as exc:
+        MoveActivityRequest.model_validate({"date": "2027-04-03", "endAt": "2027-04-03T01:00:00Z"})
     assert "endAt requires startAt" in messages(exc.value)
 
 
-def test_move_cannot_set_times_while_unscheduling() -> None:
+def test_move_date_cannot_be_null() -> None:
     with pytest.raises(ValidationError):
-        MoveActivityRequest.model_validate({"date": None, "startAt": "2027-04-03T01:00:00Z"})
+        MoveActivityRequest.model_validate({"date": None})
 
 
 def test_move_requires_date_key() -> None:
@@ -138,8 +145,11 @@ def test_patch_omitted_fields_are_not_dumped() -> None:
 
 
 def test_patch_explicit_null_is_kept_for_nullable_fields() -> None:
-    patch = UpdateActivityRequest.model_validate({"schedule": None, "notes": None})
-    assert patch.model_dump(exclude_unset=True) == {"schedule": None, "notes": None}
+    patch = UpdateActivityRequest.model_validate({"time": None, "notes": None})
+    assert patch.model_dump(exclude_unset=True) == {"time": None, "notes": None}
+    day_patch = UpdateDayRequest.model_validate({"lodging": None})
+    assert day_patch.model_dump(exclude_unset=True) == {"lodging": None}
+    assert UpdateDayRequest.model_validate({}).model_dump(exclude_unset=True) == {}
     trip_patch = UpdateTripRequest.model_validate({"destination": None})
     assert trip_patch.model_dump(exclude_unset=True) == {"destination": None}
 

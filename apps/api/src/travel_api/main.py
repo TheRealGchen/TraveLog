@@ -11,7 +11,7 @@ from .auth import require_token
 from .config import Settings
 from .db import connect, create_indexes
 from .errors import PROBLEM_JSON, install_error_handlers
-from .routes import activities, travelers, trips
+from .routes import activities, days, travelers, trips
 
 DESCRIPTION = """\
 API-first travel planner. Everything the web app does goes through this API, so AI agents
@@ -62,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1 = APIRouter(prefix="/v1", dependencies=[Depends(require_token)])
     v1.include_router(trips.router)
     v1.include_router(travelers.router)
+    v1.include_router(days.router)
     v1.include_router(activities.router)
     app.include_router(v1)
 

@@ -5,23 +5,20 @@ import type {
   ActivityStatus,
   AddActivityRequest,
   CreateTripRequest,
-  Itinerary,
+  Day,
+  DayList,
   MoveActivityRequest,
   Trip,
   UpdateActivityRequest,
+  UpdateDayRequest,
   UpdateTripRequest,
 } from "@travel/client";
-import {
-  type QueryClient,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { api, errorMessage, unwrap } from "./api";
 
-/** Poll the open trip so edits made by agents through the API show up. */
+/** Poll open trip views so edits made by agents through the API show up. */
 const POLL_MS = 10_000;
 
 export interface ActivityFilters {
@@ -32,7 +29,9 @@ export interface ActivityFilters {
 export const keys = {
   trips: ["trips"] as const,
   trip: (tripId: string) => ["trip", tripId] as const,
-  itinerary: (tripId: string) => ["itinerary", tripId] as const,
+  days: (tripId: string) => ["days", tripId] as const,
+  day: (tripId: string, date?: string) =>
+    date ? (["day", tripId, date] as const) : (["day", tripId] as const),
   activities: (tripId: string, filters?: ActivityFilters) =>
     filters ? (["activities", tripId, filters] as const) : (["activities", tripId] as const),
 };
@@ -58,11 +57,19 @@ export function useTrip(tripId: string) {
   });
 }
 
-export function useItinerary(tripId: string) {
+export function useDays(tripId: string) {
   return useQuery({
-    queryKey: keys.itinerary(tripId),
+    queryKey: keys.days(tripId),
+    queryFn: () => unwrap(api.GET("/v1/trips/{tripId}/days", { params: { path: { tripId } } })),
+    refetchInterval: POLL_MS,
+  });
+}
+
+export function useDay(tripId: string, date: string) {
+  return useQuery({
+    queryKey: keys.day(tripId, date),
     queryFn: () =>
-      unwrap(api.GET("/v1/trips/{tripId}/itinerary", { params: { path: { tripId } } })),
+      unwrap(api.GET("/v1/trips/{tripId}/days/{date}", { params: { path: { tripId, date } } })),
     refetchInterval: POLL_MS,
   });
 }
@@ -85,52 +92,13 @@ export function useActivities(tripId: string, filters: ActivityFilters) {
 function refreshTrip(qc: QueryClient, tripId: string, trip?: Trip) {
   if (trip) qc.setQueryData(keys.trip(tripId), trip);
   void qc.invalidateQueries({ queryKey: keys.trips });
-  void qc.invalidateQueries({ queryKey: keys.itinerary(tripId) });
 }
 
-function refreshActivities(qc: QueryClient, tripId: string) {
-  void qc.invalidateQueries({ queryKey: keys.itinerary(tripId) });
+/** Refetch every cached view of the trip's days and activities. */
+function refreshDays(qc: QueryClient, tripId: string) {
+  void qc.invalidateQueries({ queryKey: keys.days(tripId) });
+  void qc.invalidateQueries({ queryKey: keys.day(tripId) });
   void qc.invalidateQueries({ queryKey: keys.activities(tripId) });
-}
-
-type Snapshot = [readonly unknown[], unknown][];
-
-/** Apply an optimistic change to every cached view of the trip's activities. */
-async function optimistic(
-  qc: QueryClient,
-  tripId: string,
-  updateItinerary: (it: Itinerary) => Itinerary,
-  updateActivity: (a: Activity) => Activity | null,
-): Promise<Snapshot> {
-  await qc.cancelQueries({ queryKey: keys.itinerary(tripId) });
-  await qc.cancelQueries({ queryKey: keys.activities(tripId) });
-  const snapshot: Snapshot = [
-    ...qc.getQueriesData({ queryKey: keys.itinerary(tripId) }),
-    ...qc.getQueriesData({ queryKey: keys.activities(tripId) }),
-  ];
-  qc.setQueryData<Itinerary>(keys.itinerary(tripId), (it) => it && updateItinerary(it));
-  qc.setQueriesData<{ activities: Activity[] }>({ queryKey: keys.activities(tripId) }, (list) =>
-    list
-      ? {
-          activities: list.activities
-            .map(updateActivity)
-            .filter((a): a is Activity => a !== null),
-        }
-      : list,
-  );
-  return snapshot;
-}
-
-function rollback(qc: QueryClient, snapshot: Snapshot | undefined) {
-  for (const [key, data] of snapshot ?? []) qc.setQueryData(key, data);
-}
-
-function mapItinerary(it: Itinerary, fn: (a: Activity) => Activity): Itinerary {
-  return {
-    ...it,
-    days: it.days.map((d) => ({ ...d, activities: d.activities.map(fn) })),
-    unscheduled: it.unscheduled.map(fn),
-  };
 }
 
 // Trip mutations
@@ -154,7 +122,7 @@ export function useUpdateTrip(tripId: string) {
       unwrap(api.PATCH("/v1/trips/{tripId}", { params: { path: { tripId } }, body })),
     onSuccess: (trip) => {
       refreshTrip(qc, tripId, trip);
-      refreshActivities(qc, tripId);
+      refreshDays(qc, tripId);
     },
     onError,
   });
@@ -184,7 +152,10 @@ export function useAddTraveler(tripId: string) {
           body: { name },
         }),
       ),
-    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onSuccess: (trip) => {
+      refreshTrip(qc, tripId, trip);
+      refreshDays(qc, tripId);
+    },
     onError,
   });
 }
@@ -199,7 +170,10 @@ export function useUpdateTraveler(tripId: string) {
           body,
         }),
       ),
-    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onSuccess: (trip) => {
+      refreshTrip(qc, tripId, trip);
+      refreshDays(qc, tripId);
+    },
     onError,
   });
 }
@@ -215,7 +189,24 @@ export function useRemoveTraveler(tripId: string) {
       ),
     onSuccess: (trip) => {
       refreshTrip(qc, tripId, trip);
-      refreshActivities(qc, tripId);
+      refreshDays(qc, tripId);
+    },
+    onError,
+  });
+}
+
+// Day mutations
+
+export function useUpdateDay(tripId: string, date: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateDayRequest) =>
+      unwrap(
+        api.PATCH("/v1/trips/{tripId}/days/{date}", { params: { path: { tripId, date } }, body }),
+      ),
+    onSuccess: (day) => {
+      qc.setQueryData(keys.day(tripId, date), day);
+      void qc.invalidateQueries({ queryKey: keys.days(tripId) });
     },
     onError,
   });
@@ -226,9 +217,14 @@ export function useRemoveTraveler(tripId: string) {
 export function useAddActivity(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: AddActivityRequest) =>
-      unwrap(api.POST("/v1/trips/{tripId}/activities", { params: { path: { tripId } }, body })),
-    onSuccess: () => refreshActivities(qc, tripId),
+    mutationFn: ({ date, body }: { date: string; body: AddActivityRequest }) =>
+      unwrap(
+        api.POST("/v1/trips/{tripId}/days/{date}/activities", {
+          params: { path: { tripId, date } },
+          body,
+        }),
+      ),
+    onSuccess: () => refreshDays(qc, tripId),
     onError,
   });
 }
@@ -243,12 +239,14 @@ export function useUpdateActivity(tripId: string) {
           body,
         }),
       ),
-    onSettled: () => refreshActivities(qc, tripId),
+    onSettled: () => refreshDays(qc, tripId),
     onError,
   });
 }
 
-/** Status changes are optimistic: the card updates at once and rolls back on error. */
+type Snapshot = [readonly unknown[], unknown][];
+
+/** Status changes are optimistic: every cached copy updates at once, rolling back on error. */
 export function useSetActivityStatus(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -259,19 +257,31 @@ export function useSetActivityStatus(tripId: string) {
           body: { status },
         }),
       ),
-    onMutate: ({ activityId, status }) => {
-      const set = (a: Activity) => (a.id === activityId ? { ...a, status } : a);
-      return optimistic(qc, tripId, (it) => mapItinerary(it, set), set);
+    onMutate: async ({ activityId, status }): Promise<Snapshot> => {
+      const filters = [keys.days(tripId), keys.day(tripId), keys.activities(tripId)];
+      await Promise.all(filters.map((queryKey) => qc.cancelQueries({ queryKey })));
+      const snapshot = filters.flatMap((queryKey) => qc.getQueriesData({ queryKey }));
+      const set = (list: Activity[]) =>
+        list.map((a) => (a.id === activityId ? { ...a, status } : a));
+      qc.setQueryData<DayList>(keys.days(tripId), (d) =>
+        d && { ...d, days: d.days.map((day) => ({ ...day, activities: set(day.activities) })) },
+      );
+      qc.setQueriesData<Day>({ queryKey: keys.day(tripId) }, (day) =>
+        day && { ...day, activities: set(day.activities) },
+      );
+      qc.setQueriesData<{ activities: Activity[] }>({ queryKey: keys.activities(tripId) }, (l) =>
+        l && { activities: set(l.activities) },
+      );
+      return snapshot;
     },
     onError: (error, _vars, snapshot) => {
-      rollback(qc, snapshot);
+      for (const [key, data] of snapshot ?? []) qc.setQueryData(key, data);
       onError(error);
     },
-    onSettled: () => refreshActivities(qc, tripId),
+    onSettled: () => refreshDays(qc, tripId),
   });
 }
 
-/** Moves are optimistic: the card jumps to its new day at once and rolls back on error. */
 export function useMoveActivity(tripId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -282,43 +292,8 @@ export function useMoveActivity(tripId: string) {
           body,
         }),
       ),
-    onMutate: ({ activityId, body }) => {
-      const date = body.date ?? null;
-      const moved = (a: Activity): Activity =>
-        date === null
-          ? { ...a, schedule: { date: null, startAt: null, endAt: null } }
-          : { ...a, schedule: { ...a.schedule, date } };
-      return optimistic(
-        qc,
-        tripId,
-        (it) => {
-          const all = [...it.days.flatMap((d) => d.activities), ...it.unscheduled];
-          const activity = all.find((a) => a.id === activityId);
-          if (!activity) return it;
-          const without = (list: Activity[]) => list.filter((a) => a.id !== activityId);
-          return {
-            ...it,
-            days: it.days.map((d) => ({
-              ...d,
-              activities:
-                d.date === date
-                  ? [...without(d.activities), moved(activity)]
-                  : without(d.activities),
-            })),
-            unscheduled:
-              date === null
-                ? [...without(it.unscheduled), moved(activity)]
-                : without(it.unscheduled),
-          };
-        },
-        (a) => (a.id === activityId ? moved(a) : a),
-      );
-    },
-    onError: (error, _vars, snapshot) => {
-      rollback(qc, snapshot);
-      onError(error);
-    },
-    onSettled: () => refreshActivities(qc, tripId),
+    onSettled: () => refreshDays(qc, tripId),
+    onError,
   });
 }
 
@@ -331,7 +306,7 @@ export function useDeleteActivity(tripId: string) {
           params: { path: { tripId, activityId } },
         }),
       ),
-    onSuccess: () => refreshActivities(qc, tripId),
+    onSuccess: () => refreshDays(qc, tripId),
     onError,
   });
 }

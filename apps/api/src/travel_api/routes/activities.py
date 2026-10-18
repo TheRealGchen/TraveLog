@@ -1,29 +1,21 @@
-from typing import Annotated, Any
+from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
 from ..db import Database
 from ..errors import ApiError
-from ..ids import new_id
 from ..models import (
-    SCHEMA_VERSION,
     Activity,
     ActivityList,
     ActivityStatus,
-    AddActivityRequest,
     MoveActivityRequest,
     Trip,
     UpdateActivityRequest,
     utc_now,
 )
-from ..repository import activities as activity_repo
-from ..scheduling import (
-    default_status,
-    move_schedule,
-    resolve_schedule,
-    sort_key_flat,
-    status_after_reschedule,
-)
+from ..repository import days as day_repo
+from ..scheduling import check_day_in_trip, move_time, resolve_time, sort_key_in_day
 from .deps import (
     ETAG_HEADER,
     ActivityId,
@@ -31,14 +23,17 @@ from .deps import (
     TripId,
     activity_not_found,
     activity_response,
-    activity_write_failed,
+    check_travelers,
     concurrent_change,
     etag,
     get_db,
+    load_day,
+    load_days,
     load_trip,
     parse_if_match,
     problems,
     stale,
+    to_activity,
     traveler_not_found,
 )
 
@@ -47,23 +42,17 @@ router = APIRouter(prefix="/trips/{tripId}/activities", tags=["Activities"])
 Db = Annotated[Database, Depends(get_db)]
 
 
-def _check_travelers(ids: list[str], trip: Trip) -> list[str]:
-    """Deduplicate traveler IDs and make sure each one is on the trip."""
-    known = {t.id for t in trip.travelers}
-    errors = [
-        {
-            "path": f"body.travelerIds.{i}",
-            "message": (
-                f"traveler {tid} is not on trip {trip.id} (travelers on this trip: "
-                f"{', '.join(sorted(known)) or 'none'}); add them with add_traveler first"
-            ),
-        }
-        for i, tid in enumerate(ids)
-        if tid not in known
-    ]
-    if errors:
-        raise ApiError(422, "; ".join(e["message"] for e in errors), errors=errors)
-    return list(dict.fromkeys(ids))
+async def _write_failed(
+    db: Database, trip: Trip, activity_id: str, if_match: list[datetime] | None
+) -> ApiError:
+    """Explain why a conditional activity write matched nothing."""
+    found = await day_repo.find_activity(db, trip.id, activity_id)
+    if found is None:
+        return activity_not_found(trip.id, activity_id)
+    day, current = found
+    if if_match is not None and current.updated_at not in if_match:
+        return stale(etag(current.updated_at), to_activity(trip.id, day.date, current))
+    return concurrent_change(f"Activity {activity_id}")
 
 
 @router.get(
@@ -71,8 +60,8 @@ def _check_travelers(ids: list[str], trip: Trip) -> list[str]:
     operation_id="list_activities",
     summary="List a trip's activities",
     description=(
-        "All activities of the trip, optionally filtered. Sorted by date and start time, "
-        "with unscheduled activities last."
+        "Activities across all days of the trip, optionally filtered, ordered by day and then "
+        "start time. To see a day with its lodging, use `get_day` or `list_days`."
     ),
     response_model=ActivityList,
     responses=problems(401, 404, 422),
@@ -87,10 +76,6 @@ async def list_activities(
             description="Only activities on this day (YYYY-MM-DD, trip timezone).",
         ),
     ] = None,
-    unscheduled: Annotated[
-        bool | None,
-        Query(description="`true`: only activities with no date. `false`: only scheduled ones."),
-    ] = None,
     traveler_id: Annotated[
         str | None, Query(alias="travelerId", description="Only activities with this traveler.")
     ] = None,
@@ -100,79 +85,38 @@ async def list_activities(
     ] = None,
 ) -> ActivityList:
     trip = await load_trip(db, trip_id)
-    query: dict[str, Any] = {}
-    if date is not None and unscheduled:
-        raise ApiError(
-            422,
-            "date and unscheduled=true cannot be combined: an activity on a date is scheduled.",
-            errors=[{"path": "query.unscheduled", "message": "conflicts with query.date"}],
-        )
-    if date is not None:
-        query["schedule.date"] = date
-    elif unscheduled is not None:
-        query["schedule.date"] = None if unscheduled else {"$ne": None}
-    if traveler_id is not None:
-        if not any(t.id == traveler_id for t in trip.travelers):
-            raise traveler_not_found(trip, traveler_id)
-        query["travelerIds"] = traveler_id
-    if status_ is not None:
-        query["status"] = status_
-    activities = await activity_repo.find(db, trip_id, query)
-    return ActivityList(activities=sorted(activities, key=sort_key_flat))
-
-
-@router.post(
-    "",
-    operation_id="add_activity",
-    summary="Add an activity",
-    description=(
-        "Creates an activity. Without `schedule` it is an unscheduled idea; with only "
-        "`schedule.date` it is all-day; with `schedule.startAt` it is timed and its date is "
-        "derived from startAt in the trip's timezone. Dates must fall within the trip."
-    ),
-    status_code=status.HTTP_201_CREATED,
-    response_model=Activity,
-    responses={201: {"headers": ETAG_HEADER}, **problems(401, 404, 422)},
-)
-async def add_activity(
-    trip_id: TripId, body: AddActivityRequest, response: Response, db: Db
-) -> Activity:
-    trip = await load_trip(db, trip_id)
-    schedule = resolve_schedule(body.schedule, trip, "body.schedule")
-    now = utc_now()
-    activity = Activity(
-        schema_version=SCHEMA_VERSION,
-        id=new_id("act"),
-        trip_id=trip_id,
-        title=body.title,
-        status=body.status or default_status(schedule),
-        schedule=schedule,
-        location=body.location,
-        notes=body.notes,
-        traveler_ids=_check_travelers(body.traveler_ids, trip),
-        created_at=now,
-        updated_at=now,
-    )
-    await activity_repo.insert(db, activity)
-    response.headers["Location"] = f"/v1/trips/{trip_id}/activities/{activity.id}"
-    return activity_response(activity, response)
+    if traveler_id is not None and not any(t.id == traveler_id for t in trip.travelers):
+        raise traveler_not_found(trip, traveler_id)
+    activities = []
+    for day in await load_days(db, trip):
+        if date is not None and day.date != date:
+            continue
+        for a in sorted(day.activities, key=sort_key_in_day):
+            if status_ is not None and a.status != status_:
+                continue
+            if traveler_id is not None and traveler_id not in a.traveler_ids:
+                continue
+            activities.append(to_activity(trip_id, day.date, a))
+    return ActivityList(activities=activities)
 
 
 @router.get(
     "/{activityId}",
     operation_id="get_activity",
     summary="Get an activity",
+    description="One activity, including the `date` of the day it is on. Returns an ETag.",
     response_model=Activity,
     responses={200: {"headers": ETAG_HEADER}, **problems(401, 404)},
 )
 async def get_activity(
     trip_id: TripId, activity_id: ActivityId, response: Response, db: Db
 ) -> Activity:
-    activity = await activity_repo.get(db, trip_id, activity_id)
-    if activity is None:
+    found = await day_repo.find_activity(db, trip_id, activity_id)
+    if found is None:
         await load_trip(db, trip_id)
         raise activity_not_found(trip_id, activity_id)
-    return activity_response(activity, response)
+    day, activity = found
+    return activity_response(to_activity(trip_id, day.date, activity), response)
 
 
 @router.patch(
@@ -180,13 +124,12 @@ async def get_activity(
     operation_id="update_activity",
     summary="Update an activity",
     description=(
-        "Partial update: only the fields you send change. `schedule` and `location` are "
-        "replaced as a whole. If the schedule changes and `status` is not sent, an `idea` that "
-        "gets a date becomes `planned` and a `planned` activity that loses its date becomes "
-        "`idea`."
+        "Partial update: only the fields you send change. `time` and `location` are replaced "
+        "as a whole; null clears them. A new `time.startAt` must fall on the activity's day; "
+        "use `move_activity` to change the day."
     ),
     response_model=Activity,
-    responses={200: {"headers": ETAG_HEADER}, **problems(401, 404, 412, 422)},
+    responses={200: {"headers": ETAG_HEADER}, **problems(401, 404, 409, 412, 422)},
 )
 async def update_activity(
     trip_id: TripId,
@@ -198,28 +141,25 @@ async def update_activity(
 ) -> Activity:
     versions = parse_if_match(if_match)
     trip = await load_trip(db, trip_id)
+    found = await day_repo.find_activity(db, trip_id, activity_id)
+    if found is None:
+        raise activity_not_found(trip_id, activity_id)
+    day, _ = found
     sent = body.model_fields_set
-    fields = body.model_dump(exclude_unset=True, exclude={"schedule", "traveler_ids"})
-    status_expr = None
-    if "schedule" in sent:
-        schedule = resolve_schedule(body.schedule, trip, "body.schedule")
-        fields["schedule"] = schedule.model_dump()
-        if "status" not in sent:
-            status_expr = _status_after_reschedule_expr(schedule.date)
+    fields = body.model_dump(exclude_unset=True, exclude={"time", "traveler_ids"})
+    if "time" in sent:
+        time = resolve_time(body.time, day.date, trip, "body.time")
+        fields["time"] = time.model_dump() if time else None
     if "traveler_ids" in sent and body.traveler_ids is not None:
-        fields["travelerIds"] = _check_travelers(body.traveler_ids, trip)
-    activity = await activity_repo.update(
-        db, trip_id, activity_id, fields, utc_now(), if_match=versions, status_expr=status_expr
+        fields["travelerIds"] = check_travelers(body.traveler_ids, trip)
+    # Pinned to the day the times were validated against, in case of a concurrent move.
+    updated = await day_repo.update_activity(
+        db, trip_id, activity_id, fields, utc_now(), date=day.date, if_match=versions
     )
-    if activity is None:
-        raise await activity_write_failed(db, trip_id, activity_id, versions)
-    return activity_response(activity, response)
-
-
-def _status_after_reschedule_expr(new_date: str | None) -> dict[str, Any]:
-    """The database-side version of ``status_after_reschedule``."""
-    before, after = ("idea", "planned") if new_date is not None else ("planned", "idea")
-    return {"$cond": [{"$eq": ["$status", before]}, after, "$status"]}
+    if updated is None:
+        raise await _write_failed(db, trip, activity_id, versions)
+    activity = next(a for a in updated.activities if a.id == activity_id)
+    return activity_response(to_activity(trip_id, updated.date, activity), response)
 
 
 @router.post(
@@ -227,10 +167,9 @@ def _status_after_reschedule_expr(new_date: str | None) -> dict[str, Any]:
     operation_id="move_activity",
     summary="Move an activity to another day",
     description=(
-        "Moves an activity to `date` (or unschedules it with `date: null`). Without `startAt`, "
-        "each time of day is kept, in the trip's timezone, on the new day. With `startAt`, the "
-        "new times are used and an omitted `endAt` keeps the duration. An `idea` moved onto a "
-        "day becomes `planned`; a `planned` activity that is unscheduled becomes `idea`."
+        "Moves an activity to `date`. Without `startAt`, each time of day is kept, in the "
+        "trip's timezone, on the new day. With `startAt` (on the new day), the new times are "
+        "used and an omitted `endAt` keeps the duration."
     ),
     response_model=Activity,
     responses={200: {"headers": ETAG_HEADER}, **problems(401, 404, 409, 412, 422)},
@@ -245,24 +184,45 @@ async def move_activity(
 ) -> Activity:
     versions = parse_if_match(if_match)
     trip = await load_trip(db, trip_id)
-    # The new times depend on the current ones, so write only if the activity is unchanged
-    # since it was read (compare-and-set on updatedAt), retrying a few times under contention.
+    check_day_in_trip(trip, body.date, "body.date")
+    await load_day(db, trip, body.date)
+    # The new times depend on the current ones, so every write below is conditional on the
+    # activity being unchanged since it was read; on contention, re-read and retry.
     for _ in range(3):
-        current = await activity_repo.get(db, trip_id, activity_id)
-        if current is None:
+        found = await day_repo.find_activity(db, trip_id, activity_id)
+        if found is None:
             raise activity_not_found(trip_id, activity_id)
+        day, current = found
         if versions is not None and current.updated_at not in versions:
-            raise stale(etag(current.updated_at), current)
-        schedule = move_schedule(current.schedule, body, trip)
-        fields = {
-            "schedule": schedule.model_dump(),
-            "status": status_after_reschedule(current.status, schedule.date),
-        }
-        activity = await activity_repo.update(
-            db, trip_id, activity_id, fields, utc_now(), if_match=[current.updated_at]
+            raise stale(etag(current.updated_at), to_activity(trip_id, day.date, current))
+        time = move_time(current.time, day.date, body, trip)
+        now = utc_now()
+        if body.date == day.date:
+            updated = await day_repo.update_activity(
+                db,
+                trip_id,
+                activity_id,
+                {"time": time.model_dump() if time else None},
+                now,
+                date=day.date,
+                if_match=[current.updated_at],
+            )
+            if updated is not None:
+                moved = next(a for a in updated.activities if a.id == activity_id)
+                return activity_response(to_activity(trip_id, body.date, moved), response)
+            continue
+        # Across days: add to the target first, then remove from the source. A failure in
+        # between leaves a duplicate rather than losing the activity.
+        moved = current.model_copy(update={"time": time, "updated_at": now})
+        if await day_repo.push_activity(db, trip_id, body.date, moved, now) is None:
+            raise concurrent_change(f"Activity {activity_id}")
+        removed = await day_repo.pull_activity(
+            db, trip_id, activity_id, now, date=day.date, if_match=[current.updated_at]
         )
-        if activity is not None:
-            return activity_response(activity, response)
+        if removed:
+            return activity_response(to_activity(trip_id, body.date, moved), response)
+        # The source changed meanwhile: undo the copy and retry with fresh data.
+        await day_repo.pull_activity(db, trip_id, activity_id, now, date=body.date)
     raise concurrent_change(f"Activity {activity_id}")
 
 
@@ -271,13 +231,13 @@ async def move_activity(
     operation_id="delete_activity",
     summary="Delete an activity",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses=problems(401, 404, 412),
+    responses=problems(401, 404, 409, 412),
 )
 async def delete_activity(
     trip_id: TripId, activity_id: ActivityId, db: Db, if_match: IfMatch = None
 ) -> Response:
     versions = parse_if_match(if_match)
-    if not await activity_repo.delete(db, trip_id, activity_id, if_match=versions):
-        await load_trip(db, trip_id)
-        raise await activity_write_failed(db, trip_id, activity_id, versions)
+    trip = await load_trip(db, trip_id)
+    if not await day_repo.pull_activity(db, trip_id, activity_id, utc_now(), if_match=versions):
+        raise await _write_failed(db, trip, activity_id, versions)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

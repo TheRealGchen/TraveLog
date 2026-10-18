@@ -13,13 +13,16 @@ export type TripSummary = Schemas["TripSummary"];
 export type Traveler = Schemas["Traveler"];
 export type Activity = Schemas["Activity"];
 export type ActivityStatus = Schemas["Activity"]["status"];
-export type Itinerary = Schemas["Itinerary"];
-export type ItineraryDay = Schemas["ItineraryDay"];
+export type ActivityTime = Schemas["ActivityTime"];
+export type Day = Schemas["Day"];
+export type DayList = Schemas["DayList"];
+export type Location = Schemas["Location"];
 export type Problem = Schemas["Problem"];
 export type CreateTripRequest = Schemas["CreateTripRequest"];
 export type UpdateTripRequest = Schemas["UpdateTripRequest"];
 export type AddActivityRequest = Schemas["AddActivityRequest"];
 export type UpdateActivityRequest = Schemas["UpdateActivityRequest"];
+export type UpdateDayRequest = Schemas["UpdateDayRequest"];
 export type MoveActivityRequest = Schemas["MoveActivityRequest"];
 
 export interface ApiClientOptions {

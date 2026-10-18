@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Response, status
 from ..db import Database
 from ..ids import new_id
 from ..models import AddTravelerRequest, TripResponse, UpdateTravelerRequest, utc_now
-from ..repository import activities as activity_repo
+from ..repository import days as day_repo
 from ..repository import trips as trip_repo
 from .deps import (
     ETAG_HEADER,
@@ -110,5 +110,5 @@ async def remove_traveler(
     trip = await trip_repo.remove_traveler(db, trip_id, traveler_id, now, if_match=versions)
     if trip is None:
         raise await _traveler_write_failed(db, trip_id, traveler_id, versions)
-    await activity_repo.pull_traveler(db, trip_id, traveler_id, now)
+    await day_repo.pull_traveler(db, trip_id, traveler_id, now)
     return trip_response(trip, response)

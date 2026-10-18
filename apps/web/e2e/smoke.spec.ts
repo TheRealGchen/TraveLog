@@ -8,7 +8,7 @@ function tokyoDate(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-test("create a trip, add a traveler and an activity, check countdown and itinerary", async ({
+test("create a trip, add a traveler, plan a day, check countdown and day cards", async ({
   page,
 }) => {
   const name = `Smoke ${Date.now()}`;
@@ -45,21 +45,32 @@ test("create a trip, add a traveler and an activity, check countdown and itinera
   await page.locator("[data-slot=popover-content]").getByRole("button", { name: "Add" }).click();
   await expect(page.getByRole("button", { name: "SL Sam Lee" })).toBeVisible();
 
-  // Add a timed activity on day 2.
-  const day2 = page.getByRole("region", { name: /^Day 2,/ });
-  await day2.getByRole("button", { name: "Add" }).click();
-  await page.getByLabel("Title").fill("teamLab Planets");
-  await page.getByLabel("Start time").fill("10:00");
-  await page.getByLabel("End time").fill("12:00");
-  await page.getByLabel("Location").fill("Toyosu");
-  await page.getByRole("dialog").getByRole("button", { name: "Sam Lee" }).click();
-  await page.getByRole("button", { name: "Add activity" }).last().click();
+  // Open day 2 from its card, set lodging, and quick-add a timed activity.
+  await page.getByRole("link", { name: /^Day 2,/ }).click();
+  await expect(page).toHaveURL(/\/days\/\d{4}-\d{2}-\d{2}$/);
+  await page.getByLabel("Staying tonight").fill("Hotel Gracery");
+  await page.getByLabel("Staying tonight").press("Enter");
+  await page.getByLabel("New activity").fill("teamLab Planets");
+  await page.getByLabel("New activity").press("Enter");
+  const editor = page.getByRole("form", { name: "Edit teamLab Planets" });
+  await editor.getByLabel("Start").fill("10:00");
+  await editor.getByLabel("End").fill("12:00");
+  await editor.getByLabel("Location").fill("Toyosu");
+  await editor.getByRole("button", { name: "Sam Lee" }).click();
+  await editor.getByRole("button", { name: "Save" }).click();
 
-  // The itinerary shows it on day 2 at 10:00 Tokyo time, even though the browser is in LA.
-  const card = day2.getByRole("button", { name: "Open teamLab Planets" });
-  await expect(card).toBeVisible();
+  // Times show in Tokyo time even though the browser is in LA.
+  const card = page.getByRole("button", { name: "Open teamLab Planets" });
   await expect(card).toContainText("10:00 – 12:00");
   await expect(card).toContainText("Toyosu");
   await expect(card).toContainText("Planned");
-  await expect(page.getByRole("region", { name: /^Day 1,/ })).toContainText("Nothing planned");
+
+  // Back on the trip, the day 2 card shows its date, lodging, and the activity.
+  await page.getByRole("link", { name }).click();
+  const day2 = page.getByRole("link", { name: /^Day 2,/ });
+  await expect(day2).toContainText(String(Number(tokyoDate(11).slice(8))));
+  await expect(day2).toContainText("Staying at Hotel Gracery");
+  await expect(day2).toContainText("10:00");
+  await expect(day2).toContainText("teamLab Planets");
+  await expect(page.getByRole("link", { name: /^Day 1,/ })).toContainText("Plan this day");
 });
