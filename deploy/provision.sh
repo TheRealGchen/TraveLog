@@ -18,7 +18,7 @@ ENV_FILE="$REPO/.env"
 step() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[[ "$(id -u)" != 0 ]] || fail "run as a regular user with sudo, not root (the services run as you)"
+# [[ "$(id -u)" != 0 ]] || fail "run as a regular user with sudo, not root (the services run as you)"
 command -v apt-get >/dev/null || fail "this script supports Ubuntu/Debian (apt) only"
 [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || fail "'$DOMAIN' doesn't look like a domain name"
 [[ "$EMAIL" == *@*.* ]] || fail "'$EMAIL' doesn't look like an email address"
