@@ -4,9 +4,11 @@
 set dotenv-load
 set export
 
-# uv installs into ~/.local/bin, which non-interactive shells (like `ssh host "just deploy"` from
-# GitHub Actions) don't have on PATH: Ubuntu's ~/.bashrc returns early for them.
-export PATH := env("HOME") / ".local/bin" + ":" + env("PATH")
+# Non-interactive shells (like `ssh host "just deploy"` from GitHub Actions) skip ~/.bashrc, where
+# installers put user-level tools on PATH. So add the usual locations here: uv's ~/.local/bin
+# first, then pnpm's standalone install and nvm's newest Node as fallbacks after the existing
+# PATH, so they never override tools that are already found.
+export PATH := `nvm_bin=$(ls -d "${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin 2>/dev/null | sort -V | tail -n 1); printf '%s' "$HOME/.local/bin:$PATH:${PNPM_HOME:-$HOME/.local/share/pnpm}${nvm_bin:+:$nvm_bin}"`
 
 api := "apps/api"
 web := "apps/web"
