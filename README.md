@@ -16,34 +16,35 @@ openapi.json     The committed API contract, exported from the Pydantic models
 ## Setup
 
 Requirements: [uv](https://docs.astral.sh/uv/), Node 24+, pnpm 10, Docker (for tests and a
-local MongoDB), and make.
+local MongoDB), and [just](https://github.com/casey/just) (a command runner; run `just` to
+list the recipes).
 
 ```bash
 cp .env.example .env
 ```
 
 ```bash
-make install
+just install
 ```
 
 ```bash
-make mongo
+just mongo
 ```
 
 ```bash
-make dev
+just dev
 ```
 
 Then open http://localhost:3001. The API is at http://localhost:8000; its spec is at
 http://localhost:8000/openapi.json, interactive docs at http://localhost:8000/docs, and an
 agent-oriented guide at http://localhost:8000/llms.txt.
 
-To use MongoDB Atlas instead of `make mongo`, set `MONGODB_URI` to your Atlas connection string.
+To use MongoDB Atlas instead of `just mongo`, set `MONGODB_URI` to your Atlas connection string.
 
 ### Environment variables
 
-All of them live in one `.env` at the repo root (see `.env.example`). The Makefile exports it,
-and the web app's `next.config.ts` reads it.
+All of them live in one `.env` at the repo root (see `.env.example`). The justfile loads and
+exports it, and the web app's `next.config.ts` reads it.
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
@@ -57,14 +58,14 @@ and the web app's `next.config.ts` reads it.
 
 | Command | What it does |
 | --- | --- |
-| `make dev` | API (with reload) and web app together |
-| `make test` | Lint, type-check, contract drift checks, API tests, web unit tests |
-| `make e2e` | Playwright smoke test (starts its own API and a production web build) |
-| `make openapi` | Re-export `openapi.json` from the API |
-| `make gen-client` | Regenerate `packages/client/src/schema.ts` from `openapi.json` |
+| `just dev` | API (with reload) and web app together |
+| `just test` | Lint, type-check, contract drift checks, API tests, web unit tests |
+| `just e2e` | Playwright smoke test (starts its own API and a production web build) |
+| `just openapi` | Re-export `openapi.json` from the API |
+| `just gen-client` | Regenerate `packages/client/src/schema.ts` from `openapi.json` |
 
-When you change an API model or route, run `make openapi gen-client` and commit both files.
-`make test` (and CI) fails if either is stale.
+When you change an API model or route, run `just openapi gen-client` and commit both files.
+`just test` (and CI) fails if either is stale.
 
 API tests run against a throwaway MongoDB container (testcontainers), so Docker must be running.
 

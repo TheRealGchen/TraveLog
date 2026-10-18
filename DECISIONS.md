@@ -7,11 +7,11 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Python version.** The stack table says 3.15+, Phase 1 says 3.12. The project uses 3.15
   (`requires-python >= 3.15`, `.python-version` = 3.15) because the stack table is the
   more specific source of truth.
-- **Local MongoDB.** Atlas is the target, but `make mongo` starts `mongo:8` in Docker for local
+- **Local MongoDB.** Atlas is the target, but `just mongo` starts `mongo:8` in Docker for local
   work, and the tests use a throwaway container via testcontainers. `MONGODB_DB` (default
   `travel_planner`) was added next to the four variables in the plan so tests and e2e can use
   their own databases.
-- **One `.env` at the repo root.** The Makefile exports it to every recipe, and
+- **One `.env` at the repo root.** The justfile loads and exports it to every recipe, and
   `apps/web/next.config.ts` loads it with Node's `process.loadEnvFile`, mapping `API_URL` and
   `API_TOKEN` to `NEXT_PUBLIC_API_URL` / `NEXT_PUBLIC_API_TOKEN`.
 - **The token reaches the browser.** "Token read from an env var" in a pure client app means
@@ -26,7 +26,7 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Framer Motion** is imported from its current package name, `motion` (`motion/react`).
 - **shadcn/ui** (Radix base, Nova preset). Its CLI now depends on `cn`, shadcn's own
   class-merging package, instead of `clsx` + `tailwind-merge`.
-- **CI** is a GitHub Actions workflow: `make test` (lint, types, contract drift, API tests, web
+- **CI** is a GitHub Actions workflow: `just test` (lint, types, contract drift, API tests, web
   unit tests) plus the Playwright smoke test against a MongoDB service.
 
 ## Days (the trip as a collection of days)

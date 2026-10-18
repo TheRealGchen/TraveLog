@@ -1,6 +1,6 @@
 /**
  * Configured openapi-fetch client for the Travel Planner API.
- * `schema.ts` is generated from the root openapi.json by `make gen-client`; never edit it.
+ * `schema.ts` is generated from the root openapi.json by `just gen-client`; never edit it.
  */
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";

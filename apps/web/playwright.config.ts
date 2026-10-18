@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 // The smoke test runs its own API (port 8100, database travel_planner_e2e) and a production
 // build of the web app (port 3100), so it never touches dev data. MongoDB must be running
-// (`make mongo`, or MONGODB_URI pointing elsewhere).
+// (`just mongo`, or MONGODB_URI pointing elsewhere).
 const API_PORT = 8100;
 const WEB_PORT = 3100;
 const TOKEN = "e2e-token";

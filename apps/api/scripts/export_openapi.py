@@ -22,7 +22,7 @@ def main() -> int:
     spec = render()
     if args.check:
         if not args.path.exists() or args.path.read_text(encoding="utf-8") != spec:
-            print(f"{args.path} is out of date. Run `make openapi` and commit it.", file=sys.stderr)
+            print(f"{args.path} is out of date. Run `just openapi` and commit it.", file=sys.stderr)
             return 1
         print(f"{args.path} is up to date.")
         return 0
