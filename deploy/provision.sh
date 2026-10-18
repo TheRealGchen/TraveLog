@@ -45,20 +45,13 @@ set_env() {
   fi
 }
 
-step "Installing system packages (nginx, certbot, Docker)"
+step "Installing system packages (nginx, certbot)"
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-  nginx certbot python3-certbot-nginx docker.io curl ca-certificates openssl git
+  nginx certbot python3-certbot-nginx curl ca-certificates openssl git
 
-step "Installing Node.js 24, pnpm, and uv"
-if ! node --version 2>/dev/null | grep -qE '^v(2[4-9]|[3-9][0-9])\.'; then
-  curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-  sudo apt-get install -y -qq nodejs
-fi
-command -v pnpm >/dev/null || sudo npm install -g pnpm@10
-if ! command -v uv >/dev/null; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-fi
+step "Installing the toolchain (Node.js, pnpm, uv, Docker)"
+"$REPO/scripts/install-tools.sh"
 export PATH="$HOME/.local/bin:$PATH"
 
 step "Starting MongoDB in Docker (localhost only)"

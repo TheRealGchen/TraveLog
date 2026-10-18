@@ -203,9 +203,12 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **No access protection**, by choice: the site is open, and the bearer token is visible in the
   web app's JavaScript. HTTP basic auth on the web routes (leaving `/v1` on bearer auth) is
   the simple upgrade when needed.
-- **Toolchain on the node:**
+- **Toolchain** (`scripts/install-tools.sh`, run by `just setup` and by `just provision`):
   - Node 24 from NodeSource;
-  - pnpm 10 via npm;
+  - pnpm 10 via npm (without sudo when Node lives in a user directory, as with nvm);
   - uv from Astral's installer (it downloads the Python version the API pins);
-  - nginx, certbot, and Docker from apt;
+  - Docker from apt (`docker.io`), adding the user to the `docker` group;
+  - each tool is skipped if already present, so the script is safe on a dev machine;
+  - installing needs apt and sudo; elsewhere it says what to install by hand;
+  - nginx and certbot are installed by `provision.sh` only;
   - `just` itself must be installed first (`apt-get install just`).

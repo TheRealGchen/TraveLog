@@ -19,12 +19,16 @@ Requirements: [uv](https://docs.astral.sh/uv/), Node 24+, pnpm 10, Docker (for t
 local MongoDB), and [just](https://github.com/casey/just) (a command runner; run `just` to
 list the recipes).
 
+With just installed, `just setup` installs any of the other tools that are missing (on Ubuntu
+or Debian, using sudo) and then the project's dependencies. Tools you already have are left
+alone. On other systems it tells you what to install.
+
 ```bash
 cp .env.example .env
 ```
 
 ```bash
-just install
+just setup
 ```
 
 ```bash
@@ -59,6 +63,8 @@ exports it, and the web app's `next.config.ts` reads it.
 
 | Command | What it does |
 | --- | --- |
+| `just setup` | Install missing tools (Node 24, pnpm, uv, Docker), then the dependencies |
+| `just install` | Install the project's Python and Node dependencies |
 | `just dev` | API (with reload) and web app together |
 | `just test` | Lint, type-check, contract drift checks, API tests, web unit tests |
 | `just e2e` | Playwright smoke test (starts its own API and a production web build) |

@@ -13,6 +13,11 @@ api_port := env("API_PORT", "8000")
 default:
     @just --list --unsorted
 
+# Install the toolchain if missing (Node 24, pnpm, uv, Docker), then the project dependencies
+setup:
+    ./scripts/install-tools.sh
+    PATH="$HOME/.local/bin:$PATH" just install
+
 # Install Python and Node dependencies
 install:
     cd {{api}} && uv sync
@@ -86,6 +91,7 @@ provision domain email:
 
 # Update a provisioned node: pull, install, rebuild, and restart the services
 deploy:
+    @systemctl cat travel-api.service >/dev/null 2>&1 || { echo "error: this node isn't provisioned yet (no travel-api service). Run: just provision <domain> <email>" >&2; exit 1; }
     git pull --ff-only
     just install
     just build
