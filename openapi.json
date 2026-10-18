@@ -1,0 +1,2689 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Travel Planner API",
+    "description": "API-first travel planner. Everything the web app does goes through this API, so AI agents\nhave the same capabilities as the UI.\n\n- Authenticate every `/v1` request with `Authorization: Bearer <API_TOKEN>`.\n- Timestamps are ISO 8601. Send them with an offset or `Z`; responses are always UTC (`Z`).\n- Dates (`YYYY-MM-DD`) are calendar days in the trip's IANA `timezone`.\n- Errors are `application/problem+json` with a specific `detail` and, for validation\n  failures, an `errors` array of `{path, message}`.\n- Trips and activities return an `ETag`; send it as `If-Match` on a change to avoid\n  overwriting someone else's edit (412 on mismatch).\n\nA plain-language guide with workflows is at `/llms.txt`.\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/trips": {
+      "get": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "List trips",
+        "description": "Summary view of every trip, with countdown, status, and travelers for each.",
+        "operationId": "list_trips",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "upcoming",
+                    "ongoing",
+                    "past"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only trips with this status (trip timezone).",
+              "title": "Status"
+            },
+            "description": "Only trips with this status (trip timezone)."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "startDate",
+                "-startDate",
+                "createdAt",
+                "-createdAt",
+                "name"
+              ],
+              "type": "string",
+              "description": "Order: `startDate` (soonest first, default), `-startDate`, `createdAt`, `-createdAt` (newest first), or `name`.",
+              "default": "startDate",
+              "title": "Sort"
+            },
+            "description": "Order: `startDate` (soonest first, default), `-startDate`, `createdAt`, `-createdAt` (newest first), or `name`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "Create a trip",
+        "description": "Creates a trip with no travelers. Returns the new trip and its ETag.",
+        "operationId": "create_trip",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTripRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}": {
+      "get": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "Get a trip",
+        "description": "The trip with its travelers and countdown. Activities are fetched separately with `list_activities` or `get_itinerary`.",
+        "operationId": "get_trip",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "Update a trip",
+        "description": "Partial update: only the fields you send change. Changing `timezone` keeps activity instants (UTC) and recomputes the day of each timed activity. Rejected with 409 if new dates or a new timezone would put a scheduled activity outside the trip.",
+        "operationId": "update_trip",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTripRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change conflicts with other data (the detail says what to fix).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "Delete a trip",
+        "description": "Deletes the trip, its travelers, and all of its activities. Returns 204.",
+        "operationId": "delete_trip",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/itinerary": {
+      "get": {
+        "tags": [
+          "Trips"
+        ],
+        "summary": "Get the day-by-day itinerary",
+        "description": "One entry per day from startDate to endDate (including empty days), each with its activities sorted by startAt (all-day ones last), plus the unscheduled activities. Days are in the trip's timezone; times are UTC.",
+        "operationId": "get_itinerary",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Itinerary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/travelers": {
+      "post": {
+        "tags": [
+          "Travelers"
+        ],
+        "summary": "Add a traveler to a trip",
+        "description": "Appends a traveler. Without `color`, the next unused palette color is assigned. Returns the updated trip; the new traveler is the last item of `travelers`.",
+        "operationId": "add_traveler",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTravelerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/travelers/{travelerId}": {
+      "patch": {
+        "tags": [
+          "Travelers"
+        ],
+        "summary": "Update a traveler",
+        "description": "Changes a traveler's name or color. Returns the updated trip.",
+        "operationId": "update_traveler",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "travelerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Traveler ID (`trv_...`).",
+              "title": "Travelerid"
+            },
+            "description": "Traveler ID (`trv_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTravelerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Travelers"
+        ],
+        "summary": "Remove a traveler",
+        "description": "Removes the traveler from the trip and from every activity of the trip. Returns the updated trip.",
+        "operationId": "remove_traveler",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "travelerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Traveler ID (`trv_...`).",
+              "title": "Travelerid"
+            },
+            "description": "Traveler ID (`trv_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/activities": {
+      "get": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "List a trip's activities",
+        "description": "All activities of the trip, optionally filtered. Sorted by date and start time, with unscheduled activities last.",
+        "operationId": "list_activities",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only activities on this day (YYYY-MM-DD, trip timezone).",
+              "title": "Date"
+            },
+            "description": "Only activities on this day (YYYY-MM-DD, trip timezone)."
+          },
+          {
+            "name": "unscheduled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`true`: only activities with no date. `false`: only scheduled ones.",
+              "title": "Unscheduled"
+            },
+            "description": "`true`: only activities with no date. `false`: only scheduled ones."
+          },
+          {
+            "name": "travelerId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only activities with this traveler.",
+              "title": "Travelerid"
+            },
+            "description": "Only activities with this traveler."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "idea",
+                    "planned",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only activities with this status.",
+              "title": "Status"
+            },
+            "description": "Only activities with this status."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Add an activity",
+        "description": "Creates an activity. Without `schedule` it is an unscheduled idea; with only `schedule.date` it is all-day; with `schedule.startAt` it is timed and its date is derived from startAt in the trip's timezone. Dates must fall within the trip.",
+        "operationId": "add_activity",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddActivityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activity"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/activities/{activityId}": {
+      "get": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Get an activity",
+        "operationId": "get_activity",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Activity ID (`act_...`).",
+              "title": "Activityid"
+            },
+            "description": "Activity ID (`act_...`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activity"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Update an activity",
+        "description": "Partial update: only the fields you send change. `schedule` and `location` are replaced as a whole. If the schedule changes and `status` is not sent, an `idea` that gets a date becomes `planned` and a `planned` activity that loses its date becomes `idea`.",
+        "operationId": "update_activity",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Activity ID (`act_...`).",
+              "title": "Activityid"
+            },
+            "description": "Activity ID (`act_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateActivityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activity"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Delete an activity",
+        "operationId": "delete_activity",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Activity ID (`act_...`).",
+              "title": "Activityid"
+            },
+            "description": "Activity ID (`act_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/activities/{activityId}/move": {
+      "post": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Move an activity to another day",
+        "description": "Moves an activity to `date` (or unschedules it with `date: null`). Without `startAt`, each time of day is kept, in the trip's timezone, on the new day. With `startAt`, the new times are used and an omitted `endAt` keeps the duration. An `idea` moved onto a day becomes `planned`; a `planned` activity that is unscheduled becomes `idea`.",
+        "operationId": "move_activity",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Activity ID (`act_...`).",
+              "title": "Activityid"
+            },
+            "description": "Activity ID (`act_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveActivityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Activity"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change conflicts with other data (the detail says what to fix).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Activity": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Activity ID, prefixed with `act_`.",
+            "examples": [
+              "act_01J..."
+            ]
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "title": "Schema version",
+            "description": "Version of the stored document shape."
+          },
+          "tripId": {
+            "type": "string",
+            "title": "Trip id",
+            "description": "ID of the trip this activity belongs to."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "What the activity is.",
+            "examples": [
+              "teamLab Planets"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idea",
+              "planned",
+              "done"
+            ],
+            "title": "Status",
+            "description": "`idea`, `planned`, or `done`."
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/Schedule",
+            "description": "When the activity happens."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Location"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where the activity happens, or null."
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Free-text notes, or null."
+          },
+          "travelerIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Traveler ids",
+            "description": "IDs of the trip's travelers taking part. Empty means not assigned."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created at",
+            "description": "When the activity was created (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated at",
+            "description": "When the activity was last changed (UTC). The ETag is derived from this."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "schemaVersion",
+          "tripId",
+          "title",
+          "status",
+          "schedule",
+          "location",
+          "notes",
+          "travelerIds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "Activity",
+        "description": "An activity, stored as its own document in the `activities` collection."
+      },
+      "ActivityList": {
+        "properties": {
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "type": "array",
+            "title": "Activities",
+            "description": "Matching activities: scheduled ones by date then start time (all-day after timed ones on the same day), then unscheduled ones by creation time."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "activities"
+        ],
+        "title": "ActivityList",
+        "description": "Response of `list_activities`."
+      },
+      "AddActivityRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "description": "What the activity is.",
+            "examples": [
+              "teamLab Planets"
+            ]
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleInput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule",
+            "description": "When it happens. Omit or send null for an unscheduled idea."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Location"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Where it happens."
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Free-text notes."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "idea",
+                  "planned",
+                  "done"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Defaults to `planned` if the activity has a date, otherwise `idea`."
+          },
+          "travelerIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Traveler ids",
+            "description": "IDs of travelers on this trip who take part."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "AddActivityRequest",
+        "description": "Body for `add_activity`."
+      },
+      "AddTravelerRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Display name of the traveler.",
+            "examples": [
+              "Sam"
+            ]
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "examples": [
+                  "#6366f1"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color",
+            "description": "Avatar color as a `#rrggbb` hex string. Omit it to get the next unused color from a fixed palette."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "AddTravelerRequest",
+        "description": "Body for `add_traveler`."
+      },
+      "CreateTripRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Trip name.",
+            "examples": [
+              "Japan 2027"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Start date",
+            "description": "First day of the trip (YYYY-MM-DD).",
+            "examples": [
+              "2027-04-03"
+            ]
+          },
+          "endDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "End date",
+            "description": "Last day of the trip (YYYY-MM-DD), on or after startDate.",
+            "examples": [
+              "2027-04-03"
+            ]
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination",
+            "description": "Free-text destination."
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "IANA timezone name of the destination. Defaults to `UTC`.",
+            "default": "UTC",
+            "examples": [
+              "Asia/Tokyo"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "startDate",
+          "endDate"
+        ],
+        "title": "CreateTripRequest",
+        "description": "Body for `create_trip`."
+      },
+      "Itinerary": {
+        "properties": {
+          "tripId": {
+            "type": "string",
+            "title": "Trip id",
+            "description": "Trip ID."
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "IANA timezone of the trip. Times are UTC; convert with this for display."
+          },
+          "startDate": {
+            "type": "string",
+            "title": "Start date",
+            "description": "First day of the trip (YYYY-MM-DD)."
+          },
+          "endDate": {
+            "type": "string",
+            "title": "End date",
+            "description": "Last day of the trip (YYYY-MM-DD)."
+          },
+          "daysUntilStart": {
+            "type": "integer",
+            "title": "Days until start",
+            "description": "Whole days from today (trip timezone) to startDate; negative once started."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "upcoming",
+              "ongoing",
+              "past"
+            ],
+            "title": "Status",
+            "description": "`upcoming`, `ongoing`, or `past`."
+          },
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/ItineraryDay"
+            },
+            "type": "array",
+            "title": "Days",
+            "description": "Every day from startDate to endDate, including days with no activities."
+          },
+          "unscheduled": {
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "type": "array",
+            "title": "Unscheduled",
+            "description": "Activities with no date, oldest first."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tripId",
+          "timezone",
+          "startDate",
+          "endDate",
+          "daysUntilStart",
+          "status",
+          "days",
+          "unscheduled"
+        ],
+        "title": "Itinerary",
+        "description": "Response of `get_itinerary`: the trip laid out day by day."
+      },
+      "ItineraryDay": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date",
+            "description": "The day (YYYY-MM-DD) in the trip's timezone."
+          },
+          "dayNumber": {
+            "type": "integer",
+            "title": "Day number",
+            "description": "1 for the trip's first day, 2 for the second, and so on."
+          },
+          "activities": {
+            "items": {
+              "$ref": "#/components/schemas/Activity"
+            },
+            "type": "array",
+            "title": "Activities",
+            "description": "Activities on this day, by startAt; all-day activities (no startAt) last."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "dayNumber",
+          "activities"
+        ],
+        "title": "ItineraryDay",
+        "description": "One calendar day of the trip."
+      },
+      "Location": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Place name or address.",
+            "examples": [
+              "Toyosu"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "Location",
+        "description": "Where an activity happens."
+      },
+      "MoveActivityRequest": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "examples": [
+                  "2027-04-03"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date",
+            "description": "New day (YYYY-MM-DD, trip timezone, within the trip), or null to unschedule."
+          },
+          "startAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start at",
+            "description": "New start time, ISO 8601 with an offset or Z."
+          },
+          "endAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End at",
+            "description": "New end time, ISO 8601 with an offset or Z. Requires startAt."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date"
+        ],
+        "title": "MoveActivityRequest",
+        "description": "Body for `move_activity`.\n\n- `date: null` unschedules the activity (and clears its times).\n- `date` alone keeps each time of day, in the trip's timezone, on the new day.\n- `date` with `startAt` (and optionally `endAt`) sets new times; an omitted `endAt` keeps the\n  previous duration, and `endAt: null` clears it."
+      },
+      "Problem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "URI reference identifying the problem type."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Short summary of the problem type."
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status",
+            "description": "HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "What went wrong in this request, specific enough to fix it."
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ProblemError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors",
+            "description": "Individual validation failures, when there are any."
+          },
+          "current": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current",
+            "description": "On 412 Precondition Failed: the current version of the resource."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "title": "Problem",
+        "description": "An RFC 9457 problem details object (`application/problem+json`)."
+      },
+      "ProblemError": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Where the problem is, e.g. `body.schedule.endAt` or `query.status`."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "What is wrong and how to fix it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "message"
+        ],
+        "title": "ProblemError",
+        "description": "One validation failure."
+      },
+      "Schedule": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date",
+            "description": "Calendar day (YYYY-MM-DD) in the trip's timezone, or null if unscheduled. Derived from startAt when startAt is set."
+          },
+          "startAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start at",
+            "description": "Start time (UTC), or null for all-day."
+          },
+          "endAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End at",
+            "description": "End time (UTC), or null."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "startAt",
+          "endAt"
+        ],
+        "title": "Schedule",
+        "description": "When an activity happens. All null means unscheduled."
+      },
+      "ScheduleInput": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "examples": [
+                  "2027-04-03"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date",
+            "description": "Calendar day (YYYY-MM-DD) in the trip's timezone; must be within the trip."
+          },
+          "startAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start at",
+            "description": "Start time, ISO 8601 with an offset or Z, e.g. 2027-04-03T10:00:00+09:00."
+          },
+          "endAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End at",
+            "description": "End time, ISO 8601 with an offset or Z. Requires startAt and must be later."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ScheduleInput",
+        "description": "When an activity happens. Omitted fields are null; all null means unscheduled.\n\n- Only `date`: an all-day activity on that day.\n- `startAt` (and optionally `endAt`): a timed activity; `date` is derived from `startAt` in\n  the trip's timezone, so you can omit it. If you send it, it must agree."
+      },
+      "Traveler": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Traveler ID, prefixed with `trv_`.",
+            "examples": [
+              "trv_01J..."
+            ]
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Display name of the traveler."
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color",
+            "description": "Avatar color as a `#rrggbb` hex string.",
+            "examples": [
+              "#6366f1"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "Traveler",
+        "description": "A person on the trip. Travelers are stored inside their trip document."
+      },
+      "TripList": {
+        "properties": {
+          "trips": {
+            "items": {
+              "$ref": "#/components/schemas/TripSummary"
+            },
+            "type": "array",
+            "title": "Trips",
+            "description": "Trips matching the query, in the chosen order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "trips"
+        ],
+        "title": "TripList",
+        "description": "Response of `list_trips`."
+      },
+      "TripResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Trip ID, prefixed with `trip_`.",
+            "examples": [
+              "trip_01J..."
+            ]
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "title": "Schema version",
+            "description": "Version of the stored document shape."
+          },
+          "ownerId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner id",
+            "description": "Owner user ID. Always null until accounts exist."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Trip name.",
+            "examples": [
+              "Japan 2027"
+            ]
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination",
+            "description": "Free-text destination, or null.",
+            "examples": [
+              "Tokyo & Kyoto"
+            ]
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "IANA timezone of the trip. Trip dates and activity days are calendar dates in this timezone.",
+            "examples": [
+              "Asia/Tokyo"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Start date",
+            "description": "First day of the trip (YYYY-MM-DD, trip timezone).",
+            "examples": [
+              "2027-04-03"
+            ]
+          },
+          "endDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "End date",
+            "description": "Last day of the trip (YYYY-MM-DD, trip timezone).",
+            "examples": [
+              "2027-04-03"
+            ]
+          },
+          "travelers": {
+            "items": {
+              "$ref": "#/components/schemas/Traveler"
+            },
+            "type": "array",
+            "title": "Travelers",
+            "description": "People on the trip, in the order added."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created at",
+            "description": "When the trip was created (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated at",
+            "description": "When the trip was last changed (UTC). The ETag is derived from this."
+          },
+          "daysUntilStart": {
+            "type": "integer",
+            "title": "Days until start",
+            "description": "Whole days from today (in the trip's timezone) to startDate. 0 on the first day, negative once the trip has started."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "upcoming",
+              "ongoing",
+              "past"
+            ],
+            "title": "Status",
+            "description": "`upcoming` before startDate, `ongoing` from startDate to endDate inclusive, `past` after endDate (all in the trip's timezone)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "schemaVersion",
+          "ownerId",
+          "name",
+          "destination",
+          "timezone",
+          "startDate",
+          "endDate",
+          "travelers",
+          "createdAt",
+          "updatedAt",
+          "daysUntilStart",
+          "status"
+        ],
+        "title": "TripResponse",
+        "description": "A trip with values computed at request time."
+      },
+      "TripSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Trip ID, prefixed with `trip_`."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Trip name."
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination",
+            "description": "Free-text destination, or null."
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "IANA timezone of the trip."
+          },
+          "startDate": {
+            "type": "string",
+            "title": "Start date",
+            "description": "First day of the trip (YYYY-MM-DD)."
+          },
+          "endDate": {
+            "type": "string",
+            "title": "End date",
+            "description": "Last day of the trip (YYYY-MM-DD)."
+          },
+          "travelers": {
+            "items": {
+              "$ref": "#/components/schemas/Traveler"
+            },
+            "type": "array",
+            "title": "Travelers",
+            "description": "People on the trip, in the order added."
+          },
+          "travelerCount": {
+            "type": "integer",
+            "title": "Traveler count",
+            "description": "Number of travelers on the trip."
+          },
+          "daysUntilStart": {
+            "type": "integer",
+            "title": "Days until start",
+            "description": "Whole days from today (trip timezone) to startDate; negative once started."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "upcoming",
+              "ongoing",
+              "past"
+            ],
+            "title": "Status",
+            "description": "`upcoming`, `ongoing`, or `past`."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created at",
+            "description": "When the trip was created (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated at",
+            "description": "When the trip was last changed (UTC)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "destination",
+          "timezone",
+          "startDate",
+          "endDate",
+          "travelers",
+          "travelerCount",
+          "daysUntilStart",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "TripSummary",
+        "description": "The list view of a trip, with everything a trip card needs."
+      },
+      "UpdateActivityRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "description": "What the activity is. Cannot be null."
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleInput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule",
+            "description": "Replaces the whole schedule; null unschedules the activity."
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Location"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location",
+            "description": "Replaces the location; null clears it."
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Notes; null clears them."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idea",
+              "planned",
+              "done"
+            ],
+            "title": "Status",
+            "description": "`idea`, `planned`, or `done`. Cannot be null."
+          },
+          "travelerIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Traveler ids",
+            "description": "Replaces the list of travelers taking part. Cannot be null."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateActivityRequest",
+        "description": "Body for `update_activity`. Only the fields you send are changed; send null to clear\n`location` or `notes`.\n\n`schedule` and `location` are replaced as a whole: send the complete object. Send\n`\"schedule\": null` to unschedule. To move an activity to another day while keeping its\ntimes of day, use `move_activity`."
+      },
+      "UpdateTravelerRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "description": "New display name. Cannot be null."
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$",
+            "title": "Color",
+            "description": "New avatar color as a `#rrggbb` hex string. Cannot be null.",
+            "examples": [
+              "#6366f1"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateTravelerRequest",
+        "description": "Body for `update_traveler`. Only the fields you send are changed."
+      },
+      "UpdateTripRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Trip name. Cannot be null."
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination",
+            "description": "Free-text destination; null clears it."
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "IANA timezone name. Cannot be null.",
+            "examples": [
+              "Asia/Tokyo"
+            ]
+          },
+          "startDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Start date",
+            "description": "First day (YYYY-MM-DD). Cannot be null.",
+            "examples": [
+              "2027-04-03"
+            ]
+          },
+          "endDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "End date",
+            "description": "Last day (YYYY-MM-DD). Cannot be null.",
+            "examples": [
+              "2027-04-03"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateTripRequest",
+        "description": "Body for `update_trip`. Only the fields you send are changed; send null to clear\n`destination`.\n\nChanging `timezone` keeps every activity's UTC instants and recomputes the day of each timed\nactivity. Changing the dates or timezone is rejected if a scheduled activity would fall\noutside the trip's dates."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Send `Authorization: Bearer <API_TOKEN>` on every /v1 request.",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

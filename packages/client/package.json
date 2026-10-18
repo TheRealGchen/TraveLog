@@ -1,0 +1,22 @@
+{
+  "name": "@travel/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "gen": "openapi-typescript ../../openapi.json -o src/schema.ts",
+    "check": "openapi-typescript ../../openapi.json -o .schema.check.ts && node -e \"const f=require('fs');const same=f.readFileSync('.schema.check.ts','utf8')===f.readFileSync('src/schema.ts','utf8');f.rmSync('.schema.check.ts');if(!same){console.error('packages/client/src/schema.ts is out of date. Run make gen-client and commit it.');process.exit(1)}\""
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3"
+  }
+}
