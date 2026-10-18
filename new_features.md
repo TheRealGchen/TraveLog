@@ -4,6 +4,7 @@
 * make the "staying tonite" feature its own separate object so it can span multiple days
 * Document the features
 * add a dark mode
+* show length of trip
 
 
 ### Implemented 

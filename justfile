@@ -4,6 +4,10 @@
 set dotenv-load
 set export
 
+# uv installs into ~/.local/bin, which non-interactive shells (like `ssh host "just deploy"` from
+# GitHub Actions) don't have on PATH: Ubuntu's ~/.bashrc returns early for them.
+export PATH := env("HOME") / ".local/bin" + ":" + env("PATH")
+
 api := "apps/api"
 web := "apps/web"
 web_port := env("WEB_PORT", "3001")
@@ -16,7 +20,7 @@ default:
 # Install the toolchain if missing (Node 24, pnpm, uv, Docker), then the project dependencies
 setup:
     ./scripts/install-tools.sh
-    PATH="$HOME/.local/bin:$PATH" just install
+    just install
 
 # Install Python and Node dependencies
 install:
