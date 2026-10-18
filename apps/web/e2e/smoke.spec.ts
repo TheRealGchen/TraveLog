@@ -85,4 +85,12 @@ test("create a trip, pin a link, bulk-add travelers, plan a day, check the day c
   await expect(day2).toContainText("10:00");
   await expect(day2).toContainText("teamLab Planets");
   await expect(page.getByRole("link", { name: /^Day 1,/ })).toContainText("Plan this day");
+
+  // Dark mode: the toggle switches themes and the choice survives a reload.
+  const html = page.locator("html");
+  const startDark = (await html.getAttribute("class"))?.includes("dark") ?? false;
+  await page.getByRole("button", { name: "Toggle dark mode" }).click();
+  await expect(html).toHaveClass(startDark ? /\blight\b/ : /\bdark\b/);
+  await page.reload();
+  await expect(html).toHaveClass(startDark ? /\blight\b/ : /\bdark\b/);
 });

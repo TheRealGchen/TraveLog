@@ -23,7 +23,7 @@ export function TravelerAvatar({
     <span
       title={traveler.name}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-2 ring-white select-none",
+        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ring-2 ring-card select-none",
         sizes[size],
         className,
       )}
@@ -55,7 +55,7 @@ export function TravelerAvatars({
       {rest > 0 && (
         <span
           className={cn(
-            "inline-flex items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground ring-2 ring-white",
+            "inline-flex items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground ring-2 ring-card",
             sizes[size],
           )}
         >

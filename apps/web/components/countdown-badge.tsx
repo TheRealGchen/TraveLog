@@ -15,7 +15,7 @@ export function CountdownBadge({
     status === "past"
       ? "bg-muted text-muted-foreground"
       : status === "ongoing" || daysUntilStart === 0
-        ? "bg-emerald-100 text-emerald-800"
+        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300"
         : "bg-primary/10 text-primary";
   return (
     <span

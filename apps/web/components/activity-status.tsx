@@ -6,9 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 
 export const STATUSES: { value: ActivityStatus; label: string; className: string }[] = [
-  { value: "idea", label: "Idea", className: "bg-amber-100 text-amber-800" },
+  { value: "idea", label: "Idea", className: "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300" },
   { value: "planned", label: "Planned", className: "bg-primary/10 text-primary" },
-  { value: "done", label: "Done", className: "bg-emerald-100 text-emerald-800" },
+  { value: "done", label: "Done", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300" },
 ];
 
 export function StatusBadge({ status }: { status: ActivityStatus }) {

@@ -154,6 +154,13 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Traveler colors** are edited with the native color input; automatic colors are assigned by
   the API. Email and passport number are edited in the traveler's chip popover; clearing a field
   sends null.
+- **Dark mode** uses `next-themes` (class strategy), which works with shadcn's `.dark`
+  palette. The dark palette is retuned to match the light one: a slightly blue-tinted
+  background and a lighter indigo accent with dark text, for contrast. The theme follows the
+  OS until you click the sun/moon button (top right). The choice is then remembered in that
+  browser (localStorage). The button swaps its icons with CSS, so server and client render the
+  same markup. Hard-coded light colors (status and countdown badges, avatar rings) have dark
+  variants.
 - **Link chips** sit on the trip page below the travelers row, above the Days and Things to do
   tabs. Clicking a chip opens the link in a new tab; its pencil opens an editor for the title
   and URL, with an Unpin button. The row wraps on wider screens and scrolls sideways on phones.
