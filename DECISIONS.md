@@ -200,6 +200,23 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
   `travel-mongo-data` volume, and the port bound to `127.0.0.1` only. Docker's published ports
   bypass ufw, so binding to all interfaces would expose the unauthenticated database.
   `just mongo` uses the same settings for local development.
+- **Root is allowed.** `provision.sh` runs as root or as a sudo user. The services run as
+  whoever provisions, and all privileged steps go through an `as_root` helper, because
+  minimal root images often have no `sudo`. Running everything as root is accepted for an
+  ephemeral server.
+- **Automatic deploys** are the `deploy` job in `.github/workflows/ci.yml`:
+  - it runs only on `main` (on push, or the manual button), and only after the tests and
+    the Playwright run pass;
+  - it uses the `production` environment's secrets, so approvals can be required there;
+  - `concurrency: production` makes deploys queue rather than overlap or cancel midway;
+  - it calls the runner's plain `ssh` (no third-party SSH action handles the key), with the
+    host key pinned from a secret (`StrictHostKeyChecking=yes`), and runs `just deploy`;
+  - the recommended `authorized_keys` line forces the command and disables PTY and
+    forwarding, so a leaked CI key can only redeploy. Tested in a container: other
+    commands, shells, and port forwards are refused;
+  - `just deploy` restarts the services, without sudo when root, then waits up to 30s for
+    `/llms.txt` on the API and `/` on the web app. A broken release fails the job;
+  - no automatic rollback: revert on `main`.
 - **No access protection**, by choice: the site is open, and the bearer token is visible in the
   web app's JavaScript. HTTP basic auth on the web routes (leaving `/v1` on bearer auth) is
   the simple upgrade when needed.

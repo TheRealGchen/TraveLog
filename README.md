@@ -91,10 +91,11 @@ API tests run against a throwaway MongoDB container (testcontainers), so Docker 
   renewal (`certbot.timer`).
 
 Before you start, point your domain's DNS at the node and open ports 80 and 443. Then, on the
-node, as a regular user with sudo, install `just`:
+node, install `just`. You can work as root, or as a regular user with sudo; the services run as
+whichever user provisions them.
 
 ```bash
-sudo apt-get install -y just git
+apt-get install -y just git
 ```
 
 That package needs Ubuntu 24.04 or later. On older Ubuntu or on Debian 12, use just's installer
@@ -109,14 +110,15 @@ git clone <your-repo-url> travel-planner && cd travel-planner
 Provision, replacing the domain and email (Let's Encrypt sends expiry notices to the email):
 
 ```bash
-just provision travel.example.com you@example.com
+just provision travelog.example.com you@example.com
 ```
 
 It writes `.env` for production (`API_URL` and `WEB_ORIGIN` become `https://<domain>`). If no
 token is set, it generates a random `API_TOKEN`; agents use that token to call
 `https://<domain>/v1`. Re-running it is safe: it keeps the token, the data, and the certificate.
 
-To ship new commits later (pull, install, rebuild, restart):
+To ship new commits by hand (pull, install, rebuild, restart, then check that both services
+answer):
 
 ```bash
 just deploy
@@ -134,6 +136,54 @@ putting real passport numbers on a public domain.
 
 The deployment files are in `deploy/`: the nginx site and proxy snippet, the systemd units, and
 `provision.sh`.
+
+### Automatic deploys from GitHub Actions
+
+The CI workflow (`.github/workflows/ci.yml`) has a `deploy` job. After the tests and the
+Playwright run pass on `main`, it SSHes into the server and runs `just deploy`. If the services
+don't come back up, the job fails. You can also redeploy `main` with the workflow's
+**Run workflow** button.
+
+One-time setup:
+
+1. On your own machine, create a key used only for deploys:
+
+   ```bash
+   ssh-keygen -t ed25519 -f travel-deploy -N "" -C github-actions-deploy
+   ```
+
+2. On the server, add the public key (`travel-deploy.pub`) to `~/.ssh/authorized_keys`
+   (`/root/.ssh/authorized_keys` when deploying as root). Prefix it with a forced command, so
+   the key can only deploy and can't open a shell or forward ports:
+
+   ```
+   command="cd ~/travel-planner && just deploy",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty ssh-ed25519 AAAA... github-actions-deploy
+   ```
+
+3. Get the server's host key, so the workflow only ever talks to your server:
+
+   ```bash
+   ssh-keyscan -t ed25519 your.server.example.com
+   ```
+
+4. In GitHub, under Settings → Environments, create an environment named `production`. Add these
+   secrets to it. You can also make deploys wait for your approval there.
+
+   | Secret | Value |
+   | --- | --- |
+   | `SSH_HOST` | The server's hostname or IP |
+   | `SSH_PRIVATE_KEY` | The contents of `travel-deploy` (the private key) |
+   | `SSH_KNOWN_HOSTS` | The `ssh-keyscan` output from step 3 |
+   | `SSH_USER` | Optional; defaults to `root` |
+   | `SSH_PORT` | Optional; defaults to `22` |
+   | `DEPLOY_PATH` | Optional; defaults to `~/travel-planner` |
+
+The server pulls with `git pull`. For a public repo, the HTTPS clone works as is. For a private
+repo, add the server's own SSH public key to the repo as a read-only Deploy Key (Settings →
+Deploy keys) and clone with the `git@github.com:...` URL.
+
+There is no automatic rollback: to undo a release, revert the commit on `main`, and the revert
+deploys like any other push.
 
 ## Using the API with curl
 

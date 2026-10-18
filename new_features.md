@@ -3,6 +3,7 @@
 * tell the agent to make a good visualization of the data models (?)
 * make the "staying tonite" feature its own separate object so it can span multiple days
 * Document the features
+* add a dark mode
 
 
 ### Implemented 

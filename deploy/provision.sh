@@ -2,7 +2,8 @@
 # Provision this repo on a fresh Ubuntu/Debian node: dependencies, MongoDB in Docker, the API
 # and web app as systemd services, nginx as the reverse proxy, and HTTPS from Let's Encrypt.
 #
-# Usage (from the cloned repo, as a regular user with sudo): just provision <domain> <email>
+# Usage (from the cloned repo): just provision <domain> <email>
+# Run it as root, or as a regular user with sudo; the services run as whoever runs it.
 # The domain's DNS must already point at this node, and ports 80 and 443 must be reachable.
 # Safe to re-run: it updates what is there and keeps the existing certificate and API token.
 set -euo pipefail
@@ -18,12 +19,19 @@ ENV_FILE="$REPO/.env"
 step() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# [[ "$(id -u)" != 0 ]] || fail "run as a regular user with sudo, not root (the services run as you)"
+# Run a command as root: directly when we are root (minimal images may lack sudo), else sudo.
+as_root() { if [[ "$(id -u)" == 0 ]]; then "$@"; else sudo "$@"; fi; }
+if [[ "$(id -u)" == 0 ]]; then
+  DOCKER="docker"
+  echo "Running as root: the services will run as root."
+else
+  DOCKER="sudo docker"
+fi
 command -v apt-get >/dev/null || fail "this script supports Ubuntu/Debian (apt) only"
 [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || fail "'$DOMAIN' doesn't look like a domain name"
 [[ "$EMAIL" == *@*.* ]] || fail "'$EMAIL' doesn't look like an email address"
 
-# Replace __PLACEHOLDERS__ in a template and install it with sudo.
+# Replace __PLACEHOLDERS__ in a template and install it as root.
 render() {
   local template="$1" dest="$2"
   sed -e "s|__DOMAIN__|$DOMAIN|g" \
@@ -32,7 +40,7 @@ render() {
       -e "s|__NODE__|$(command -v node)|g" \
       -e "s|__API_PORT__|$API_PORT|g" \
       -e "s|__WEB_PORT__|$WEB_PORT|g" \
-      "$template" | sudo tee "$dest" >/dev/null
+      "$template" | as_root tee "$dest" >/dev/null
 }
 
 # Set KEY=VALUE in .env, replacing an existing line or appending one.
@@ -46,8 +54,8 @@ set_env() {
 }
 
 step "Installing system packages (nginx, certbot)"
-sudo apt-get update -qq
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+as_root apt-get update -qq
+as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
   nginx certbot python3-certbot-nginx curl ca-certificates openssl git
 
 step "Installing the toolchain (Node.js, pnpm, uv, Docker)"
@@ -55,8 +63,8 @@ step "Installing the toolchain (Node.js, pnpm, uv, Docker)"
 export PATH="$HOME/.local/bin:$PATH"
 
 step "Starting MongoDB in Docker (localhost only)"
-sudo systemctl enable --now docker
-(cd "$REPO" && just mongo "sudo docker")
+as_root systemctl enable --now docker
+(cd "$REPO" && just mongo "$DOCKER")
 
 step "Configuring $ENV_FILE"
 [[ -f "$ENV_FILE" ]] || cp "$REPO/.env.example" "$ENV_FILE"
@@ -79,30 +87,30 @@ clean_env=(env -u API_URL -u API_TOKEN -u WEB_ORIGIN -u MONGODB_URI -u MONGODB_D
 step "Installing systemd services (travel-api, travel-web)"
 render "$REPO/deploy/systemd/travel-api.service" /etc/systemd/system/travel-api.service
 render "$REPO/deploy/systemd/travel-web.service" /etc/systemd/system/travel-web.service
-sudo systemctl daemon-reload
-sudo systemctl enable travel-api travel-web
-sudo systemctl restart travel-api travel-web
+as_root systemctl daemon-reload
+as_root systemctl enable travel-api travel-web
+as_root systemctl restart travel-api travel-web
 
 step "Configuring nginx for $DOMAIN"
-sudo install -m 644 "$REPO/deploy/nginx/travel-planner-proxy.conf" \
+as_root install -m 644 "$REPO/deploy/nginx/travel-planner-proxy.conf" \
   /etc/nginx/snippets/travel-planner-proxy.conf
 render "$REPO/deploy/nginx/travel-planner.conf" /etc/nginx/sites-available/travel-planner
-sudo ln -sf /etc/nginx/sites-available/travel-planner /etc/nginx/sites-enabled/travel-planner
-sudo nginx -t
-sudo systemctl enable --now nginx
-sudo systemctl reload nginx
+as_root ln -sf /etc/nginx/sites-available/travel-planner /etc/nginx/sites-enabled/travel-planner
+as_root nginx -t
+as_root systemctl enable --now nginx
+as_root systemctl reload nginx
 
-if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then
+if command -v ufw >/dev/null && as_root ufw status | grep -q "Status: active"; then
   step "Opening ports 80 and 443 in ufw"
-  sudo ufw allow 'Nginx Full'
+  as_root ufw allow 'Nginx Full'
 fi
 
 step "Getting an HTTPS certificate from Let's Encrypt"
 # Issues a certificate (or reuses a valid one), adds HTTPS to the nginx site, and redirects
 # HTTP to HTTPS. The certbot package's systemd timer renews it automatically.
-sudo certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive \
+as_root certbot --nginx -d "$DOMAIN" -m "$EMAIL" --agree-tos --non-interactive \
   --redirect --keep-until-expiring
-sudo systemctl enable --now certbot.timer 2>/dev/null || true
+as_root systemctl enable --now certbot.timer 2>/dev/null || true
 
 step "Checking the deployment"
 for _ in $(seq 1 30); do
@@ -122,5 +130,5 @@ cat <<EOF
 Done. Open https://$DOMAIN
 Agents use the API at https://$DOMAIN/v1 with the API_TOKEN from $ENV_FILE.
 Note: the web app is not password-protected, and the API token is visible in its JavaScript.
-Update later with: just deploy
+Update later with: just deploy (or automatically from GitHub Actions; see the README).
 EOF

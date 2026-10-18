@@ -89,14 +89,19 @@ e2e: mongo
 provision domain email:
     ./deploy/provision.sh {{domain}} {{email}}
 
-# Update a provisioned node: pull, install, rebuild, and restart the services
+# Update a provisioned node: pull, install, rebuild, restart, and check the services are up
 deploy:
     @systemctl cat travel-api.service >/dev/null 2>&1 || { echo "error: this node isn't provisioned yet (no travel-api service). Run: just provision <domain> <email>" >&2; exit 1; }
     git pull --ff-only
     just install
     just build
-    sudo systemctl restart travel-api travel-web
-    @echo "Deployed $(git rev-parse --short HEAD)."
+    $([ "$(id -u)" = 0 ] || echo sudo -n) systemctl restart travel-api travel-web
+    @for i in $(seq 1 30); do \
+        curl -fsS -o /dev/null http://127.0.0.1:{{api_port}}/llms.txt && curl -fsS -o /dev/null http://127.0.0.1:{{web_port}}/ && break; \
+        if [ "$i" = 30 ]; then echo "error: services didn't come up within 30s; check: just logs" >&2; exit 1; fi; \
+        sleep 1; \
+    done
+    @echo "Deployed $(git rev-parse --short HEAD); the API and web app are responding."
 
 # Follow the production service logs
 logs:
