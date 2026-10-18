@@ -12,6 +12,7 @@ import type {
   Trip,
   UpdateActivityRequest,
   UpdateDayRequest,
+  UpdateLinkRequest,
   UpdateTravelerRequest,
   UpdateTripRequest,
 } from "@travel/client";
@@ -203,6 +204,45 @@ export function useRemoveTraveler(tripId: string) {
       refreshTrip(qc, tripId, trip);
       refreshDays(qc, tripId);
     },
+    onError,
+  });
+}
+
+// Link mutations
+
+export function useAddLink(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { url: string; title?: string | null }) =>
+      unwrap(api.POST("/v1/trips/{tripId}/links", { params: { path: { tripId } }, body })),
+    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onError,
+  });
+}
+
+export function useUpdateLink(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ linkId, ...body }: { linkId: string } & UpdateLinkRequest) =>
+      unwrap(
+        api.PATCH("/v1/trips/{tripId}/links/{linkId}", {
+          params: { path: { tripId, linkId } },
+          body,
+        }),
+      ),
+    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
+    onError,
+  });
+}
+
+export function useRemoveLink(tripId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (linkId: string) =>
+      unwrap(
+        api.DELETE("/v1/trips/{tripId}/links/{linkId}", { params: { path: { tripId, linkId } } }),
+      ),
+    onSuccess: (trip) => refreshTrip(qc, tripId, trip),
     onError,
   });
 }

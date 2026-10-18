@@ -125,6 +125,7 @@ async def create_trip(body: CreateTripRequest, response: Response, db: Db) -> Tr
         start_date=body.start_date,
         end_date=body.end_date,
         travelers=[],
+        links=[],
         created_at=now,
         updated_at=now,
     )

@@ -37,6 +37,9 @@ A trip is a collection of days; each day holds that day's activities.
   `name` is required. `color` (`#rrggbb`) is assigned from a palette if omitted. Emails are
   lowercased; passport numbers are uppercased with spaces and dashes removed (5-20 letters or
   digits). Email and passport number must each be unique within the trip.
+- Pinned link (inside a trip, in `links[]`): `id, url, title | null` (yours),
+  `pageTitle | null, imageUrl | null, iconUrl | null` (fetched from the page when pinned),
+  `createdAt, updatedAt`. Show `title`, else `pageTitle`, else the URL's host.
 - Day: `tripId, date, dayNumber, lodging {name} | null` (where you sleep that night),
   `startLocation {name} | null` (where the day starts), `activities[], createdAt, updatedAt`.
   There is exactly one day per date from startDate to endDate; days are created and removed
@@ -53,6 +56,13 @@ Trips
 - get_trip: GET /v1/trips/{tripId}
 - update_trip: PATCH /v1/trips/{tripId}  (any of name, destination, timezone, startDate, endDate)
 - delete_trip: DELETE /v1/trips/{tripId}  (also deletes its days and activities)
+
+Links (each returns the updated trip)
+- add_link: POST /v1/trips/{tripId}/links  {url, title?}  (up to 50 per trip, each URL once;
+  the page is fetched for a preview, and the link is pinned even if that fails)
+- update_link: PATCH /v1/trips/{tripId}/links/{linkId}  {url?, title?}  (null title shows the
+  page's title; a new url refetches the preview)
+- remove_link: DELETE /v1/trips/{tripId}/links/{linkId}
 
 Days
 - list_days: GET /v1/trips/{tripId}/days  (every day with lodging, start location, and
@@ -87,7 +97,8 @@ Activities
 2. Reschedule: move_activity with a new `date` (keeps times) or with `startAt`/`endAt`.
 3. Mark something done: update_activity {"status": "done"}.
 4. Assign people: update_activity {"travelerIds": ["trv_..."]} (IDs from get_trip).
-5. Shorten a trip: move activities off the days being dropped and clear their lodging, then
+5. Save a booking or guide: add_link {"url": "https://..."}.
+6. Shorten a trip: move activities off the days being dropped and clear their lodging, then
    update_trip with the new dates.
 
 ## Safe concurrent edits

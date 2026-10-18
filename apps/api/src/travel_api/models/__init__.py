@@ -12,6 +12,7 @@ from .activity import (
 )
 from .common import SCHEMA_VERSION, ApiModel, format_utc, utc_now
 from .day import Day, DayDocument, DayList, UpdateDayRequest
+from .link import MAX_LINKS, AddLinkRequest, PinnedLink, UpdateLinkRequest
 from .problem import Problem, ProblemError
 from .traveler import (
     TRAVELER_PALETTE,
@@ -33,6 +34,7 @@ from .trip import (
 )
 
 __all__ = [
+    "MAX_LINKS",
     "SCHEMA_VERSION",
     "TRAVELER_PALETTE",
     "Activity",
@@ -41,6 +43,7 @@ __all__ = [
     "ActivityStatus",
     "ActivityTime",
     "ActivityTimeInput",
+    "AddLinkRequest",
     "AddActivityRequest",
     "AddTravelerRequest",
     "AddTravelersRequest",
@@ -50,6 +53,7 @@ __all__ = [
     "DayDocument",
     "DayList",
     "Location",
+    "PinnedLink",
     "MoveActivityRequest",
     "Problem",
     "ProblemError",
@@ -62,6 +66,7 @@ __all__ = [
     "TripSummary",
     "UpdateActivityRequest",
     "UpdateDayRequest",
+    "UpdateLinkRequest",
     "UpdateTravelerRequest",
     "UpdateTripRequest",
     "format_utc",

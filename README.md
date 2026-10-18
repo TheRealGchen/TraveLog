@@ -52,6 +52,7 @@ exports it, and the web app's `next.config.ts` reads it.
 | `MONGODB_DB` | API | Database name. Default `travel_planner`. |
 | `API_TOKEN` | API, web | The bearer token every caller must send. Required. |
 | `API_URL` | web | Where the browser reaches the API. Default `http://localhost:8000`. |
+| `LINK_PREVIEWS` | API | Fetch a title, image, and icon when a link is pinned. Default `true`. |
 | `WEB_ORIGIN` | API | Origin(s) allowed by CORS, comma-separated. Default `http://localhost:3001`. |
 
 ## Commands
@@ -99,6 +100,12 @@ error names its row (for example `body.travelers.1.email`):
 
 ```bash
 curl -s -X POST $API/trips/$TRIP/travelers/batch -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"travelers": [{"name": "Ana Ruiz", "email": "ana@example.com"}, {"name": "Kai"}]}'
+```
+
+Pin a link to the trip. The API fetches the page's title, preview image, and icon:
+
+```bash
+curl -s -X POST $API/trips/$TRIP/links -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"url": "https://www.japan-guide.com/e/e3011.html"}'
 ```
 
 Set where you're staying on April 3 and where the day starts:
@@ -172,6 +179,9 @@ Every UI action is exactly one documented API operation; the web app has no othe
 | Days tab (the grid of day cards) | `list_days` |
 | Open a day card (day page) | `get_day` |
 | Day page, "Staying tonight" / "Starting from" | `update_day` |
+| "Pin link" (chips below the travelers row) | `add_link` |
+| Link chip pencil, Save (title, URL) | `update_link` |
+| Link chip pencil, Unpin | `remove_link` |
 | Add traveler | `add_traveler` |
 | Add traveler, "Add multiple…" (paste box) | `add_travelers` |
 | Traveler chip, Save (name, email, passport number, color) | `update_traveler` |

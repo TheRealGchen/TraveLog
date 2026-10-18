@@ -4,7 +4,7 @@ from typing import Any
 from pymongo import ReturnDocument
 
 from ..db import Database
-from ..models import TRAVELER_PALETTE, Trip
+from ..models import MAX_LINKS, TRAVELER_PALETTE, PinnedLink, Trip
 from .documents import from_document, to_document, version_filter
 
 
@@ -12,6 +12,7 @@ def _trip(doc: dict[str, Any] | None) -> Trip | None:
     if doc is None:
         return None
     data = from_document(doc)
+    data.setdefault("links", [])  # trips stored before pinned links existed
     for traveler in data.get("travelers", []):
         # Travelers stored before email and passport existed read as null (migrate on read).
         traveler.setdefault("email", None)
@@ -167,6 +168,72 @@ async def remove_traveler(
     doc = await db.trips.find_one_and_update(
         {"_id": trip_id, "travelers.id": traveler_id, **version_filter(if_match)},
         {"$pull": {"travelers": {"id": traveler_id}}, "$set": {"updatedAt": now}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return _trip(doc)
+
+
+async def add_link(
+    db: Database,
+    trip_id: str,
+    link: PinnedLink,
+    now: datetime,
+    *,
+    if_match: list[datetime] | None = None,
+) -> Trip | None:
+    """Append a link unless its URL is already pinned or the trip has MAX_LINKS links."""
+    doc = await db.trips.find_one_and_update(
+        {
+            "_id": trip_id,
+            **version_filter(if_match),
+            "links.url": {"$ne": link.url},
+            f"links.{MAX_LINKS - 1}": {"$exists": False},
+        },
+        {"$push": {"links": link.model_dump()}, "$set": {"updatedAt": now}},
+        return_document=ReturnDocument.AFTER,
+    )
+    return _trip(doc)
+
+
+async def update_link(
+    db: Database,
+    trip_id: str,
+    link_id: str,
+    fields: dict[str, Any],
+    now: datetime,
+    *,
+    if_match: list[datetime] | None = None,
+) -> Trip | None:
+    """``$set`` fields of one link; a new URL must not be pinned on another link."""
+    query: dict[str, Any] = {"_id": trip_id, "links.id": link_id, **version_filter(if_match)}
+    if "url" in fields:
+        query["links"] = {"$not": {"$elemMatch": {"url": fields["url"], "id": {"$ne": link_id}}}}
+    doc = await db.trips.find_one_and_update(
+        query,
+        {
+            "$set": {
+                **{f"links.$[l].{k}": v for k, v in fields.items()},
+                "links.$[l].updatedAt": now,
+                "updatedAt": now,
+            }
+        },
+        array_filters=[{"l.id": link_id}],
+        return_document=ReturnDocument.AFTER,
+    )
+    return _trip(doc)
+
+
+async def remove_link(
+    db: Database,
+    trip_id: str,
+    link_id: str,
+    now: datetime,
+    *,
+    if_match: list[datetime] | None = None,
+) -> Trip | None:
+    doc = await db.trips.find_one_and_update(
+        {"_id": trip_id, "links.id": link_id, **version_filter(if_match)},
+        {"$pull": {"links": {"id": link_id}}, "$set": {"updatedAt": now}},
         return_document=ReturnDocument.AFTER,
     )
     return _trip(doc)

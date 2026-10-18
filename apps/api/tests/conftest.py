@@ -9,6 +9,7 @@ from testcontainers.community.mongodb import MongoDbContainer
 
 from travel_api.config import Settings
 from travel_api.main import create_app
+from travel_api.previews import LinkPreview
 
 TOKEN = "test-token"
 
@@ -23,9 +24,21 @@ def mongo_uri() -> Iterator[str]:
 async def app(mongo_uri: str) -> AsyncGenerator[FastAPI]:
     db_name = f"test_{uuid4().hex}"
     app = create_app(Settings(mongodb_uri=mongo_uri, api_token=TOKEN, mongodb_db=db_name))
+    app.state.fetch_preview = fake_fetch_preview
     async with app.router.lifespan_context(app):
         yield app
         await app.state.db.client.drop_database(db_name)
+
+
+async def fake_fetch_preview(url: str) -> LinkPreview | None:
+    """Offline stand-in for the real fetcher: URLs containing "nopreview" have no preview."""
+    if "nopreview" in url:
+        return None
+    return LinkPreview(
+        title=f"Title of {url}",
+        image_url=f"{url.rstrip('/')}/og.png",
+        icon_url=f"{url.rstrip('/')}/favicon.ico",
+    )
 
 
 @pytest.fixture

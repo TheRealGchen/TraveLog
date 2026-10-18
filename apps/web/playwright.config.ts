@@ -29,6 +29,8 @@ export default defineConfig({
         MONGODB_DB: "travel_planner_e2e",
         API_TOKEN: TOKEN,
         WEB_ORIGIN: `http://localhost:${WEB_PORT}`,
+        // Keep the test offline: links are pinned without fetching a preview.
+        LINK_PREVIEWS: "false",
       },
       reuseExistingServer: false,
       timeout: 60_000,

@@ -10,6 +10,7 @@ from .common import (
     UtcDatetime,
     patch_field,
 )
+from .link import PinnedLink
 from .traveler import Traveler
 
 TripStatus = Literal["upcoming", "ongoing", "past"]
@@ -22,7 +23,7 @@ def _check_range(start: str | None, end: str | None) -> None:
 
 
 class Trip(ApiModel):
-    """A trip as stored in the `trips` collection. Activities live in their own collection."""
+    """A trip as stored in the `trips` collection. Its days live in the `days` collection."""
 
     id: str = Field(description="Trip ID, prefixed with `trip_`.", examples=["trip_01J..."])
     schema_version: int = Field(description="Version of the stored document shape.")
@@ -40,6 +41,9 @@ class Trip(ApiModel):
     start_date: DateStr = Field(description="First day of the trip (YYYY-MM-DD, trip timezone).")
     end_date: DateStr = Field(description="Last day of the trip (YYYY-MM-DD, trip timezone).")
     travelers: list[Traveler] = Field(description="People on the trip, in the order added.")
+    links: list[PinnedLink] = Field(
+        description="Web links pinned to the trip (bookings, guides, maps), in the order pinned."
+    )
     created_at: UtcDatetime = Field(description="When the trip was created (UTC).")
     updated_at: UtcDatetime = Field(
         description="When the trip was last changed (UTC). The ETag is derived from this."

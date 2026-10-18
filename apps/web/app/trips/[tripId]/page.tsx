@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { DaysTab } from "@/components/days-tab";
+import { LinkChips } from "@/components/link-chips";
 import { ThingsToDoTab } from "@/components/things-to-do-tab";
 import { TripHeader } from "@/components/trip-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +49,9 @@ export default function TripPage() {
       {trip.data && (
         <>
           <TripHeader trip={trip.data} />
+          <div className="mt-6">
+            <LinkChips trip={trip.data} />
+          </div>
           <Tabs defaultValue="days" className="mt-10">
             <TabsList>
               <TabsTrigger value="days">Days</TabsTrigger>

@@ -10,6 +10,7 @@ class Settings:
     api_token: str
     mongodb_db: str = "travel_planner"
     web_origins: list[str] = field(default_factory=lambda: ["http://localhost:3001"])
+    link_previews: bool = True
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -25,4 +26,6 @@ class Settings:
             api_token=os.environ["API_TOKEN"],
             mongodb_db=os.environ.get("MONGODB_DB", "travel_planner"),
             web_origins=[o.strip() for o in origins.split(",") if o.strip()],
+            link_previews=os.environ.get("LINK_PREVIEWS", "true").lower()
+            not in ("0", "false", "no"),
         )

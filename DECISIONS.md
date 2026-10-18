@@ -77,6 +77,26 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
   changing the dates each touch the trip and then its days in a second operation. A crash
   between the two leaves orphaned or missing days (missing days are recreated on read);
   acceptable at this scale.
+- **Pinned links live in the trip document** (`links[]`, at most 50, each URL once), like
+  travelers. Each link stores your optional `title` separately from the page's `pageTitle`, so
+  clearing your title shows the page's title again.
+- **Link previews are fetched by the API when a link is pinned** (or its URL changes), not by
+  the browser.
+  - The API reads `og:title`/`<title>`, `og:image`/`twitter:image`, and an icon (apple touch
+    icon, then `rel=icon`, then `/favicon.ico`). If the fetch fails, the link is still pinned
+    without a preview.
+  - Guarding against server-side request forgery:
+    - only http(s) URLs whose host resolves only to public (global) addresses are fetched;
+    - every redirect hop (at most 3) is checked again;
+    - non-HTML responses are ignored;
+    - the timeout is 5 seconds and at most 512 KB is read.
+  - Remaining risk: DNS could change between the address check and the connection (DNS
+    rebinding). Acceptable for a single-user app; a fetch proxy would close it.
+  - Previews aren't refreshed automatically. Changing the URL refetches them.
+  - `LINK_PREVIEWS=false` turns fetching off. The tests swap in an offline fetcher, and the
+    Playwright run disables fetching.
+  - The browser loads preview images and icons straight from their sites, with
+    `referrerPolicy="no-referrer"`. A broken image falls back to the icon, then to a globe.
 - **Traveler email and passport number** are optional and nullable; only `name` is required.
   - Emails are trimmed, lowercased, and checked with a simple `local@domain.tld` pattern (no
     email-validation dependency).
@@ -134,6 +154,9 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 - **Traveler colors** are edited with the native color input; automatic colors are assigned by
   the API. Email and passport number are edited in the traveler's chip popover; clearing a field
   sends null.
+- **Link chips** sit on the trip page below the travelers row, above the Days and Things to do
+  tabs. Clicking a chip opens the link in a new tab; its pencil opens an editor for the title
+  and URL, with an Unpin button. The row wraps on wider screens and scrolls sideways on phones.
 - **Bulk add** is a paste box: one traveler per line as `Name, email, passport`, with tabs also
   accepted for spreadsheet pastes. The UI only splits lines for the preview; the API does all
   validation.

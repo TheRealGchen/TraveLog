@@ -8,7 +8,7 @@ function tokyoDate(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-test("create a trip, bulk-add travelers, plan a day, check countdown and day cards", async ({
+test("create a trip, pin a link, bulk-add travelers, plan a day, check the day cards", async ({
   page,
 }) => {
   const name = `Smoke ${Date.now()}`;
@@ -38,6 +38,13 @@ test("create a trip, bulk-add travelers, plan a day, check countdown and day car
   await expect(page.getByRole("heading", { name })).toBeVisible();
   await expect(page.getByText("days to go")).toBeVisible();
   await expect(page.getByText("10", { exact: true })).toBeVisible();
+
+  // Pin a link; it shows as a chip below the travelers (no preview offline, so the host shows).
+  await page.getByRole("button", { name: "Pin link" }).click();
+  await page.getByLabel("URL").fill("https://www.example.com/ryokan-booking");
+  await page.getByRole("button", { name: "Pin", exact: true }).click();
+  const chip = page.getByRole("link", { name: /example\.com/ });
+  await expect(chip).toHaveAttribute("href", "https://www.example.com/ryokan-booking");
 
   // Add two travelers at once through the bulk dialog.
   await page.getByRole("button", { name: "Add traveler" }).click();

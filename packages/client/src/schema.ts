@@ -120,6 +120,50 @@ export interface paths {
         patch: operations["update_traveler"];
         trace?: never;
     };
+    "/v1/trips/{tripId}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pin a link to a trip
+         * @description Pins a web link (booking, guide, map, ...) to the trip. The API fetches the page once to get its title, preview image, and icon; if that fails the link is still pinned, without a preview. A trip holds up to 50 links and each URL once. Returns the updated trip; the new link is the last item of `links`.
+         */
+        post: operations["add_link"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trips/{tripId}/links/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unpin a link
+         * @description Removes a pinned link from the trip. Returns the updated trip.
+         */
+        delete: operations["remove_link"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a pinned link
+         * @description Changes a link's title (null shows the page's own title again) or URL (the preview is fetched again). Returns the updated trip.
+         */
+        patch: operations["update_link"];
+        trace?: never;
+    };
     "/v1/trips/{tripId}/days": {
         parameters: {
             query?: never;
@@ -406,6 +450,23 @@ export interface components {
             travelerIds?: string[];
         };
         /**
+         * AddLinkRequest
+         * @description Body for `add_link`.
+         */
+        AddLinkRequest: {
+            /**
+             * Url
+             * @description Full http(s) URL to pin. Must not already be pinned.
+             * @example https://www.japan-guide.com/e/e3011.html
+             */
+            url: string;
+            /**
+             * Title
+             * @description Your title for the link. Omit it to show the page's own title.
+             */
+            title?: string | null;
+        };
+        /**
          * AddTravelerRequest
          * @description Body for `add_traveler`, and one entry of `add_travelers`.
          */
@@ -608,6 +669,55 @@ export interface components {
             endAt?: string | null;
         };
         /**
+         * PinnedLink
+         * @description A web link pinned to a trip, with preview details fetched when it was pinned.
+         */
+        PinnedLink: {
+            /**
+             * Id
+             * @description Link ID, prefixed with `lnk_`.
+             * @example lnk_01J...
+             */
+            id: string;
+            /**
+             * Url
+             * @description The pinned http(s) URL.
+             */
+            url: string;
+            /**
+             * Title
+             * @description Title you set, or null. Display `title`, else `pageTitle`, else the URL's host.
+             */
+            title: string | null;
+            /**
+             * Page title
+             * @description The page's own title (`og:title` or `<title>`), fetched when pinned, or null.
+             */
+            pageTitle: string | null;
+            /**
+             * Image url
+             * @description Preview image from the page (`og:image`), or null. Load it from the source.
+             */
+            imageUrl: string | null;
+            /**
+             * Icon url
+             * @description The site's icon (favicon), or null.
+             */
+            iconUrl: string | null;
+            /**
+             * Created at
+             * Format: date-time
+             * @description When the link was pinned (UTC).
+             */
+            createdAt: string;
+            /**
+             * Updated at
+             * Format: date-time
+             * @description When the link was last changed (UTC).
+             */
+            updatedAt: string;
+        };
+        /**
          * Problem
          * @description An RFC 9457 problem details object (`application/problem+json`).
          */
@@ -762,6 +872,11 @@ export interface components {
              */
             travelers: components["schemas"]["Traveler"][];
             /**
+             * Links
+             * @description Web links pinned to the trip (bookings, guides, maps), in the order pinned.
+             */
+            links: components["schemas"]["PinnedLink"][];
+            /**
              * Created at
              * Format: date-time
              * @description When the trip was created (UTC).
@@ -910,6 +1025,23 @@ export interface components {
              * @description Where the day starts; null clears it.
              */
             startLocation?: components["schemas"]["Location"] | null;
+        };
+        /**
+         * UpdateLinkRequest
+         * @description Body for `update_link`. Only the fields you send change.
+         */
+        UpdateLinkRequest: {
+            /**
+             * Url
+             * @description New URL; the preview is fetched again. Cannot be null.
+             * @example https://www.japan-guide.com/e/e3011.html
+             */
+            url?: string;
+            /**
+             * Title
+             * @description New title; null clears it so the page's own title shows.
+             */
+            title?: string | null;
         };
         /**
          * UpdateTravelerRequest
@@ -1471,6 +1603,219 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateTravelerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    add_link: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The change conflicts with other data (the detail says what to fix). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    remove_link: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+                /** @description Link ID (`lnk_...`). */
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_link: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Trip ID (`trip_...`). */
+                tripId: string;
+                /** @description Link ID (`lnk_...`). */
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLinkRequest"];
             };
         };
         responses: {

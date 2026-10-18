@@ -918,6 +918,383 @@
         }
       }
     },
+    "/v1/trips/{tripId}/links": {
+      "post": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Pin a link to a trip",
+        "description": "Pins a web link (booking, guide, map, ...) to the trip. The API fetches the page once to get its title, preview image, and icon; if that fails the link is still pinned, without a preview. A trip holds up to 50 links and each URL once. Returns the updated trip; the new link is the last item of `links`.",
+        "operationId": "add_link",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change conflicts with other data (the detail says what to fix).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trips/{tripId}/links/{linkId}": {
+      "patch": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Update a pinned link",
+        "description": "Changes a link's title (null shows the page's own title again) or URL (the preview is fetched again). Returns the updated trip.",
+        "operationId": "update_link",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Link ID (`lnk_...`).",
+              "title": "Linkid"
+            },
+            "description": "Link ID (`lnk_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Links"
+        ],
+        "summary": "Unpin a link",
+        "description": "Removes a pinned link from the trip. Returns the updated trip.",
+        "operationId": "remove_link",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tripId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Trip ID (`trip_...`).",
+              "examples": [
+                "trip_01J..."
+              ],
+              "title": "Tripid"
+            },
+            "description": "Trip ID (`trip_...`)."
+          },
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Link ID (`lnk_...`).",
+              "title": "Linkid"
+            },
+            "description": "Link ID (`lnk_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/trips/{tripId}/days": {
       "get": {
         "tags": [
@@ -2212,6 +2589,40 @@
         "title": "AddActivityRequest",
         "description": "Body for `add_activity`. The day comes from the URL."
       },
+      "AddLinkRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Url",
+            "description": "Full http(s) URL to pin. Must not already be pinned.",
+            "examples": [
+              "https://www.japan-guide.com/e/e3011.html"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Your title for the link. Omit it to show the page's own title."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "AddLinkRequest",
+        "description": "Body for `add_link`."
+      },
       "AddTravelerRequest": {
         "properties": {
           "name": {
@@ -2568,6 +2979,97 @@
         "title": "MoveActivityRequest",
         "description": "Body for `move_activity`.\n\n- `date` alone keeps each time of day, in the trip's timezone, on the new day.\n- `date` with `startAt` (and optionally `endAt`) sets new times; an omitted `endAt` keeps\n  the previous duration, and `endAt: null` clears it."
       },
+      "PinnedLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Link ID, prefixed with `lnk_`.",
+            "examples": [
+              "lnk_01J..."
+            ]
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The pinned http(s) URL."
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "Title you set, or null. Display `title`, else `pageTitle`, else the URL's host."
+          },
+          "pageTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page title",
+            "description": "The page's own title (`og:title` or `<title>`), fetched when pinned, or null."
+          },
+          "imageUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image url",
+            "description": "Preview image from the page (`og:image`), or null. Load it from the source."
+          },
+          "iconUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon url",
+            "description": "The site's icon (favicon), or null."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created at",
+            "description": "When the link was pinned (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated at",
+            "description": "When the link was last changed (UTC)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "title",
+          "pageTitle",
+          "imageUrl",
+          "iconUrl",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "PinnedLink",
+        "description": "A web link pinned to a trip, with preview details fetched when it was pinned."
+      },
       "Problem": {
         "properties": {
           "type": {
@@ -2825,6 +3327,14 @@
             "title": "Travelers",
             "description": "People on the trip, in the order added."
           },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PinnedLink"
+            },
+            "type": "array",
+            "title": "Links",
+            "description": "Web links pinned to the trip (bookings, guides, maps), in the order pinned."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -2865,6 +3375,7 @@
           "startDate",
           "endDate",
           "travelers",
+          "links",
           "createdAt",
           "updatedAt",
           "daysUntilStart",
@@ -3073,6 +3584,37 @@
         "type": "object",
         "title": "UpdateDayRequest",
         "description": "Body for `update_day`. Only the fields you send are changed; null clears a field."
+      },
+      "UpdateLinkRequest": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "title": "Url",
+            "description": "New URL; the preview is fetched again. Cannot be null.",
+            "examples": [
+              "https://www.japan-guide.com/e/e3011.html"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "New title; null clears it so the page's own title shows."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateLinkRequest",
+        "description": "Body for `update_link`. Only the fields you send change."
       },
       "UpdateTravelerRequest": {
         "properties": {
