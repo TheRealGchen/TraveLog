@@ -1,0 +1,33 @@
+// Generated from openapi.json by scripts/operations.mjs (`just gen-client`); never edit it.
+
+/** The operationId of each operation, keyed by "METHOD /schema/path". */
+export const operationIds: Record<string, string> = {
+  "GET /v1/trips": "list_trips",
+  "POST /v1/trips": "create_trip",
+  "GET /v1/trips/{tripId}": "get_trip",
+  "PATCH /v1/trips/{tripId}": "update_trip",
+  "DELETE /v1/trips/{tripId}": "delete_trip",
+  "POST /v1/trips/{tripId}/travelers": "add_traveler",
+  "POST /v1/trips/{tripId}/travelers/batch": "add_travelers",
+  "PATCH /v1/trips/{tripId}/travelers/{travelerId}": "update_traveler",
+  "DELETE /v1/trips/{tripId}/travelers/{travelerId}": "remove_traveler",
+  "POST /v1/trips/{tripId}/links": "add_link",
+  "PATCH /v1/trips/{tripId}/links/{linkId}": "update_link",
+  "DELETE /v1/trips/{tripId}/links/{linkId}": "remove_link",
+  "GET /v1/trips/{tripId}/days": "list_days",
+  "GET /v1/trips/{tripId}/days/{date}": "get_day",
+  "PATCH /v1/trips/{tripId}/days/{date}": "update_day",
+  "POST /v1/trips/{tripId}/days/{date}/activities": "add_activity",
+  "GET /v1/trips/{tripId}/activities": "list_activities",
+  "GET /v1/trips/{tripId}/activities/{activityId}": "get_activity",
+  "PATCH /v1/trips/{tripId}/activities/{activityId}": "update_activity",
+  "DELETE /v1/trips/{tripId}/activities/{activityId}": "delete_activity",
+  "POST /v1/trips/{tripId}/activities/{activityId}/move": "move_activity",
+  "POST /v1/tickets": "create_ticket",
+  "GET /v1/tickets": "list_tickets",
+  "POST /v1/tickets/claim": "claim_ticket",
+  "GET /v1/tickets/{ticketId}": "get_ticket",
+  "PATCH /v1/tickets/{ticketId}": "update_ticket",
+  "GET /v1/tickets/{ticketId}/brief": "get_ticket_brief",
+  "POST /v1/tickets/{ticketId}/resolve": "resolve_ticket",
+};

@@ -172,6 +172,23 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
 
 ## Frontend behavior
 
+- **Feedback button** (`components/feedback-button.tsx`): a round icon button next to the
+  theme toggle on every page. The dialog lists everything it will send as removable chips:
+  - **the page:** the path and its route pattern, rebuilt from `useParams()` (each param value
+    becomes `[name]`), plus viewport, theme, and the build's git commit (`NEXT_PUBLIC_BUILD`, set
+    in `next.config.ts`);
+  - **the element last touched** on this page, or one picked with "Point at something". Only
+    components tagged `data-feedback="Name"` count, with an explicit `data-feedback-label` and
+    `data-feedback-id`; text is never scraped from the page, so traveler emails and passport
+    numbers can't be sent by accident;
+  - **records:** IDs in the route params and the element's `data-feedback-id`, each with the last
+    ETag the app saw for a response whose path ends in that ID;
+  - **the last 5 errors and failed API calls**, from window `error`/`unhandledrejection`
+    listeners and an openapi-fetch middleware in `lib/api.ts`. Calls are named by operationId
+    through `packages/client/src/operations.ts`, generated from `openapi.json` with the schema
+    (`just gen-client`; `check-client` checks both). Only the operation, status, problem type,
+    and error paths are kept, and failures of the feedback calls themselves are left out.
+  - The capture logic is plain functions in `lib/feedback.ts`, unit-tested with `node:test`.
 - **Countdown text** ("12 days to go", "Today!", "In progress", "Completed") is formatting of
   the API's `daysUntilStart` and `status`; the numbers and status come from the API.
 - **Day cards and day pages.** The trip page shows one large card per day (date, lodging, start

@@ -31,6 +31,9 @@ export function ActivityCard({
 
   return (
     <div
+      data-feedback="ActivityCard"
+      data-feedback-label={activity.title}
+      data-feedback-id={activity.id}
       role="button"
       tabIndex={0}
       aria-label={`Open ${activity.title}`}

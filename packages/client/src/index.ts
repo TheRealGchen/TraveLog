@@ -6,6 +6,7 @@ import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
 
 export type { components, operations, paths } from "./schema";
+export { operationIds } from "./operations";
 
 type Schemas = components["schemas"];
 export type Trip = Schemas["TripResponse"];
@@ -28,6 +29,10 @@ export type UpdateDayRequest = Schemas["UpdateDayRequest"];
 export type AddTravelerRequest = Schemas["AddTravelerRequest"];
 export type UpdateTravelerRequest = Schemas["UpdateTravelerRequest"];
 export type MoveActivityRequest = Schemas["MoveActivityRequest"];
+export type Ticket = Schemas["Ticket"];
+export type TicketKind = Schemas["Ticket"]["kind"];
+export type CreateTicketRequest = Schemas["CreateTicketRequest"];
+export type TicketContextInput = NonNullable<CreateTicketRequest["context"]>[number];
 
 export interface ApiClientOptions {
   /** API origin, e.g. http://localhost:8000 (paths already include /v1). */

@@ -5,6 +5,7 @@ import type {
   ActivityStatus,
   AddActivityRequest,
   AddTravelerRequest,
+  CreateTicketRequest,
   CreateTripRequest,
   Day,
   DayList,
@@ -359,6 +360,15 @@ export function useDeleteActivity(tripId: string) {
         }),
       ),
     onSuccess: () => refreshDays(qc, tripId),
+    onError,
+  });
+}
+
+// Feedback
+
+export function useCreateTicket() {
+  return useMutation({
+    mutationFn: (body: CreateTicketRequest) => unwrap(api.POST("/v1/tickets", { body })),
     onError,
   });
 }

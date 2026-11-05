@@ -26,6 +26,8 @@ export function DayCard({
 
   return (
     <motion.div
+      data-feedback="DayCard"
+      data-feedback-label={day.date}
       className="h-full"
       whileHover={{ y: -4 }}
       transition={{ type: "spring", stiffness: 400, damping: 30 }}

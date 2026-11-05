@@ -164,6 +164,9 @@ function ActivityEditor({
 
   return (
     <form
+      data-feedback="ActivityEditor"
+      data-feedback-label={activity.title}
+      data-feedback-id={activity.id}
       onSubmit={save}
       className="grid gap-5 rounded-2xl border-2 border-primary/30 bg-card p-5 shadow-lg sm:p-6"
       aria-label={`Edit ${activity.title}`}
