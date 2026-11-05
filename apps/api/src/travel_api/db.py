@@ -15,3 +15,5 @@ async def create_indexes(db: Database) -> None:
     await db.trips.create_index([("ownerId", ASCENDING), ("startDate", ASCENDING)])
     await db.days.create_index([("tripId", ASCENDING), ("date", ASCENDING)])
     await db.days.create_index([("activities.id", ASCENDING)])
+    await db.tickets.create_index([("status", ASCENDING), ("createdAt", ASCENDING)])
+    await db.tickets.create_index([("context.id", ASCENDING)])

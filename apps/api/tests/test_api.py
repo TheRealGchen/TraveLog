@@ -59,9 +59,16 @@ async def test_openapi_and_llms_txt_are_public(client: httpx.AsyncClient) -> Non
         "update_activity",
         "move_activity",
         "delete_activity",
+        "create_ticket",
+        "list_tickets",
+        "get_ticket",
+        "get_ticket_brief",
+        "update_ticket",
+        "claim_ticket",
+        "resolve_ticket",
     }
     r = await client.get("/llms.txt")
-    assert r.status_code == 200 and "move_activity" in r.text
+    assert r.status_code == 200 and "move_activity" in r.text and "claim_ticket" in r.text
 
 
 async def test_missing_and_wrong_token(client: httpx.AsyncClient) -> None:

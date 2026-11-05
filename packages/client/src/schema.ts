@@ -293,6 +293,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List tickets
+         * @description Tickets, oldest first, optionally filtered.
+         */
+        get: operations["list_tickets"];
+        put?: never;
+        /**
+         * File feedback
+         * @description Files a ticket with the person's feedback and optional context items describing where it happened (page, element, recent errors, failed API calls, records by ID). Context is stored as sent and never checked against other data. The API adds an `api.server` item. New tickets have status `new` and must be approved (`update_ticket` with `status: ready`) before they can be claimed.
+         */
+        post: operations["create_ticket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tickets/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a ticket to work on
+         * @description Claims a ticket for 2 hours. Without `id`, claims the oldest `ready` ticket, or returns 204 if there is none. With `id`, claims that ticket; 409 if it isn't ready or someone else holds it. Claiming a ticket you already hold renews the claim. A lapsed claim returns the ticket to `ready`.
+         */
+        post: operations["claim_ticket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tickets/{ticketId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a ticket */
+        get: operations["get_ticket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Triage a ticket
+         * @description Changes `kind`, or `status`: `ready` approves the ticket for work, and also releases a claim or reopens a closed ticket (clearing its claim and resolution); `new` takes it back out of the queue. Returns the updated ticket.
+         */
+        patch: operations["update_ticket"];
+        trace?: never;
+    };
+    "/v1/tickets/{ticketId}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a ticket as a Markdown brief
+         * @description The ticket rendered as Markdown for an agent to work from: the feedback and context (fenced and marked as untrusted input), grouped into Frontend, Backend, and Data, and the calls for claiming and resolving it.
+         */
+        get: operations["get_ticket_brief"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tickets/{ticketId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a ticket
+         * @description Closes the ticket as `resolved` or `wontfix` with a summary and optional link (e.g. the pull request), and clears any claim. 409 if it is already closed.
+         */
+        post: operations["resolve_ticket"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -505,6 +610,111 @@ export interface components {
             travelers: components["schemas"]["AddTravelerRequest"][];
         };
         /**
+         * ApiRequestContext
+         * @description An API call that failed shortly before the ticket was filed. Never includes bodies.
+         */
+        ApiRequestContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "api.request";
+            /**
+             * Operation id
+             * @description The operation's `operationId`, e.g. `update_activity`.
+             */
+            operationId: string;
+            /**
+             * Status
+             * @description HTTP status code of the response.
+             */
+            status: number;
+            /**
+             * Problem type
+             * @description `type` of the problem+json response, if any.
+             */
+            problemType?: string | null;
+            /**
+             * Error paths
+             * @description `path` of each validation error, e.g. `body.time`.
+             */
+            errorPaths?: string[];
+        };
+        /**
+         * ApiServerContext
+         * @description Added by the API when the ticket is created; clients cannot send it.
+         */
+        ApiServerContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "api.server";
+            /**
+             * Build
+             * @description Version (git commit) of the API, or null if unknown.
+             */
+            build: string | null;
+        };
+        /**
+         * Claim
+         * @description Who is working on a ticket, and until when.
+         */
+        Claim: {
+            /**
+             * By
+             * @description Who claimed it, e.g. an agent session name.
+             */
+            by: string;
+            /**
+             * Expires at
+             * Format: date-time
+             * @description When the claim lapses (UTC). Claim again before then to keep it.
+             */
+            expiresAt: string;
+        };
+        /**
+         * ClaimTicketRequest
+         * @description Body for `claim_ticket`.
+         */
+        ClaimTicketRequest: {
+            /**
+             * By
+             * @description Who is claiming, e.g. an agent session name. Claiming again renews.
+             * @example claude-session-7f3a
+             */
+            by: string;
+            /**
+             * Id
+             * @description A specific ticket to claim. Omit it to claim the oldest ready ticket.
+             */
+            id?: string | null;
+        };
+        /**
+         * CreateTicketRequest
+         * @description Body for `create_ticket`. Only `body` is required.
+         */
+        CreateTicketRequest: {
+            /**
+             * Body
+             * @description The feedback, in the person's own words.
+             * @example Notes get cut off on mobile; I can only see two lines.
+             */
+            body: string;
+            /**
+             * Kind
+             * @description Default `other`.
+             * @default other
+             * @enum {string}
+             */
+            kind: "bug" | "idea" | "question" | "other";
+            /**
+             * Context
+             * @description Up to 20 context items.
+             */
+            context?: (components["schemas"]["WebPageContext"] | components["schemas"]["WebElementContext"] | components["schemas"]["WebErrorContext"] | components["schemas"]["ApiRequestContext"] | components["schemas"]["EntityContext"])[];
+        };
+        /**
          * CreateTripRequest
          * @description Body for `create_trip`.
          */
@@ -629,6 +839,28 @@ export interface components {
              * @description Every day from startDate to endDate, in order.
              */
             days: components["schemas"]["Day"][];
+        };
+        /**
+         * EntityContext
+         * @description A record the ticket is about, by ID. The ID prefix gives its type (`trip_`, `act_`, ...).
+         */
+        EntityContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "entity";
+            /**
+             * Id
+             * @description The record's ID. It is not checked; the record may since have been deleted.
+             * @example act_01J...
+             */
+            id: string;
+            /**
+             * Etag
+             * @description The record's ETag when the person saw it, to tell whether it changed since.
+             */
+            etag?: string | null;
         };
         /**
          * Location
@@ -770,6 +1002,113 @@ export interface components {
              * @description What is wrong and how to fix it.
              */
             message: string;
+        };
+        /**
+         * Resolution
+         * @description How a ticket was closed.
+         */
+        Resolution: {
+            /**
+             * Summary
+             * @description What was done, or why nothing will be.
+             */
+            summary: string;
+            /**
+             * Url
+             * @description Link to the change (e.g. a pull request), or null.
+             */
+            url: string | null;
+        };
+        /**
+         * ResolveTicketRequest
+         * @description Body for `resolve_ticket`.
+         */
+        ResolveTicketRequest: {
+            /**
+             * Status
+             * @description How the ticket ends.
+             * @enum {string}
+             */
+            status: "resolved" | "wontfix";
+            /**
+             * Summary
+             * @description What was done, or why nothing will be.
+             */
+            summary: string;
+            /**
+             * Url
+             * @description Link to the change, e.g. a PR.
+             */
+            url?: string | null;
+        };
+        /**
+         * Ticket
+         * @description A piece of feedback, with context, queued for a person or an agent to work on.
+         */
+        Ticket: {
+            /**
+             * Id
+             * @description Ticket ID, prefixed with `tkt_`.
+             * @example tkt_01J...
+             */
+            id: string;
+            /**
+             * Schema version
+             * @description Version of the stored document shape.
+             */
+            schemaVersion: number;
+            /**
+             * Body
+             * @description The feedback, as written.
+             */
+            body: string;
+            /**
+             * Kind
+             * @description `bug`, `idea`, `question`, or `other`.
+             * @enum {string}
+             */
+            kind: "bug" | "idea" | "question" | "other";
+            /**
+             * Context
+             * @description What the web app and the API knew.
+             */
+            context: (components["schemas"]["WebPageContext"] | components["schemas"]["WebElementContext"] | components["schemas"]["WebErrorContext"] | components["schemas"]["ApiRequestContext"] | components["schemas"]["ApiServerContext"] | components["schemas"]["EntityContext"])[];
+            /**
+             * Status
+             * @description `new` (filed), `ready` (approved for work), `claimed` (being worked on), `resolved`, or `wontfix`.
+             * @enum {string}
+             */
+            status: "new" | "ready" | "claimed" | "resolved" | "wontfix";
+            /**
+             * Claim
+             * @description The current claim while `claimed`, else null.
+             */
+            claim: components["schemas"]["Claim"] | null;
+            /**
+             * Resolution
+             * @description How it was closed, once `resolved` or `wontfix`; else null.
+             */
+            resolution: components["schemas"]["Resolution"] | null;
+            /**
+             * Created at
+             * Format: date-time
+             * @description When the ticket was filed (UTC).
+             */
+            createdAt: string;
+            /**
+             * Updated at
+             * Format: date-time
+             * @description When the ticket last changed (UTC). The ETag is derived from this.
+             */
+            updatedAt: string;
+        };
+        /**
+         * TicketList
+         * @description Tickets, oldest first.
+         */
+        TicketList: {
+            /** Tickets */
+            tickets: components["schemas"]["Ticket"][];
         };
         /**
          * Traveler
@@ -1044,6 +1383,24 @@ export interface components {
             title?: string | null;
         };
         /**
+         * UpdateTicketRequest
+         * @description Body for `update_ticket`. Only the fields you send change.
+         */
+        UpdateTicketRequest: {
+            /**
+             * Status
+             * @description `ready` approves the ticket for work (also releases a claim or reopens a closed ticket); `new` takes it back out of the queue. Cannot be null.
+             * @enum {string}
+             */
+            status?: "new" | "ready";
+            /**
+             * Kind
+             * @description New kind. Cannot be null.
+             * @enum {string}
+             */
+            kind?: "bug" | "idea" | "question" | "other";
+        };
+        /**
          * UpdateTravelerRequest
          * @description Body for `update_traveler`. Only the fields you send are changed; send null to clear
          *     `email` or `passportNumber`.
@@ -1109,6 +1466,87 @@ export interface components {
              * @example 2027-04-03
              */
             endDate?: string;
+        };
+        /**
+         * WebElementContext
+         * @description The part of the screen the person pointed at.
+         */
+        WebElementContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "web.element";
+            /**
+             * Component
+             * @description Component name, e.g. `ActivityCard`.
+             * @example ActivityCard
+             */
+            component: string;
+            /**
+             * Label
+             * @description What it showed, e.g. the activity's title.
+             */
+            label?: string | null;
+        };
+        /**
+         * WebErrorContext
+         * @description An error the web app hit shortly before the ticket was filed.
+         */
+        WebErrorContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "web.error";
+            /**
+             * Message
+             * @description The error message.
+             */
+            message: string;
+            /**
+             * Stack
+             * @description Stack trace.
+             */
+            stack?: string | null;
+        };
+        /**
+         * WebPageContext
+         * @description The screen the person was on.
+         */
+        WebPageContext: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "web.page";
+            /**
+             * Route
+             * @description Route pattern with `[param]` placeholders.
+             * @example /trips/[tripId]/days/[date]
+             */
+            route: string;
+            /**
+             * Path
+             * @description The actual path, e.g. `/trips/trip_01J.../days/2027-04-03`.
+             */
+            path: string;
+            /**
+             * Viewport
+             * @description Viewport size as `WIDTHxHEIGHT` in CSS pixels.
+             * @example 390x844
+             */
+            viewport?: string | null;
+            /**
+             * Theme
+             * @description Color theme in use.
+             */
+            theme?: ("light" | "dark") | null;
+            /**
+             * Build
+             * @description Version (git commit) of the web app build.
+             */
+            build?: string | null;
         };
     };
     responses: never;
@@ -2391,6 +2829,427 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Activity"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The change conflicts with other data (the detail says what to fix). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_tickets: {
+        parameters: {
+            query?: {
+                /** @description Only tickets with this status. */
+                status?: ("new" | "ready" | "claimed" | "resolved" | "wontfix") | null;
+                /** @description Only tickets of this kind. */
+                kind?: ("bug" | "idea" | "question" | "other") | null;
+                /** @description Only tickets with an `entity` context item for this record ID. */
+                entity?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TicketList"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_ticket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    claim_ticket: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description No ticket is ready to claim. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The change conflicts with other data (the detail says what to fix). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_ticket: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticket ID (`tkt_...`). */
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_ticket: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Ticket ID (`tkt_...`). */
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description If-Match did not match the current ETag; `current` holds the current version. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    get_ticket_brief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Ticket ID (`tkt_...`). */
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": string;
+                };
+            };
+            /** @description Missing or invalid bearer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A trip, traveler, or activity ID in the path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/markdown": components["schemas"]["Problem"];
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The request is invalid; `errors` lists each problem with its path. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resolve_ticket: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                /** @description Ticket ID (`tkt_...`). */
+                ticketId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveTicketRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    /** @description Version of the returned resource; send it back as If-Match. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Ticket"];
                 };
             };
             /** @description Missing or invalid bearer token. */
