@@ -12,7 +12,7 @@ from .auth import require_token
 from .config import Settings
 from .db import connect, create_indexes
 from .errors import PROBLEM_JSON, install_error_handlers
-from .routes import activities, days, links, travelers, trips
+from .routes import activities, days, links, tickets, travelers, trips
 
 DESCRIPTION = """\
 API-first travel planner. Everything the web app does goes through this API, so AI agents
@@ -70,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     v1.include_router(links.router)
     v1.include_router(days.router)
     v1.include_router(activities.router)
+    v1.include_router(tickets.router)
     app.include_router(v1)
 
     llms_txt = files("travel_api").joinpath("llms.txt").read_text(encoding="utf-8")

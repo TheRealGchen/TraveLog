@@ -22,6 +22,7 @@ function host(url: string): string {
 export function LinkChips({ trip }: { trip: Trip }) {
   return (
     <div
+      data-feedback="LinkChips"
       className="-mx-1 flex gap-3 overflow-x-auto px-1 pt-1 pb-2 sm:flex-wrap sm:overflow-visible"
       aria-label="Pinned links"
     >
@@ -72,7 +73,12 @@ function Thumbnail({ link }: { link: PinnedLink }) {
 function LinkChip({ tripId, link }: { tripId: string; link: PinnedLink }) {
   const label = link.title ?? link.pageTitle ?? host(link.url);
   return (
-    <div className="group relative shrink-0">
+    <div
+      data-feedback="LinkChip"
+      data-feedback-label={label}
+      data-feedback-id={link.id}
+      className="group relative shrink-0"
+    >
       <a
         href={link.url}
         target="_blank"

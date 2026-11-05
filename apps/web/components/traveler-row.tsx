@@ -14,7 +14,7 @@ import { useAddTraveler, useRemoveTraveler, useUpdateTraveler } from "@/lib/quer
 
 export function TravelerRow({ trip }: { trip: Trip }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div data-feedback="TravelerRow" className="flex flex-wrap items-center gap-2">
       {trip.travelers.map((t) => (
         <TravelerChip key={t.id} trip={trip} traveler={t} />
       ))}

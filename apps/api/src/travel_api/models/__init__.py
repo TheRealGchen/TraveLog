@@ -14,6 +14,21 @@ from .common import SCHEMA_VERSION, ApiModel, format_utc, utc_now
 from .day import Day, DayDocument, DayList, UpdateDayRequest
 from .link import MAX_LINKS, AddLinkRequest, PinnedLink, UpdateLinkRequest
 from .problem import Problem, ProblemError
+from .ticket import (
+    CLAIM_TTL,
+    MAX_CONTEXT_ITEMS,
+    ApiServerContext,
+    Claim,
+    ClaimTicketRequest,
+    CreateTicketRequest,
+    Resolution,
+    ResolveTicketRequest,
+    Ticket,
+    TicketKind,
+    TicketList,
+    TicketStatus,
+    UpdateTicketRequest,
+)
 from .traveler import (
     TRAVELER_PALETTE,
     AddTravelerRequest,
@@ -34,6 +49,8 @@ from .trip import (
 )
 
 __all__ = [
+    "CLAIM_TTL",
+    "MAX_CONTEXT_ITEMS",
     "MAX_LINKS",
     "SCHEMA_VERSION",
     "TRAVELER_PALETTE",
@@ -48,6 +65,10 @@ __all__ = [
     "AddTravelerRequest",
     "AddTravelersRequest",
     "ApiModel",
+    "ApiServerContext",
+    "Claim",
+    "ClaimTicketRequest",
+    "CreateTicketRequest",
     "CreateTripRequest",
     "Day",
     "DayDocument",
@@ -57,6 +78,12 @@ __all__ = [
     "MoveActivityRequest",
     "Problem",
     "ProblemError",
+    "Resolution",
+    "ResolveTicketRequest",
+    "Ticket",
+    "TicketKind",
+    "TicketList",
+    "TicketStatus",
     "Traveler",
     "Trip",
     "TripList",
@@ -67,6 +94,7 @@ __all__ = [
     "UpdateActivityRequest",
     "UpdateDayRequest",
     "UpdateLinkRequest",
+    "UpdateTicketRequest",
     "UpdateTravelerRequest",
     "UpdateTripRequest",
     "format_utc",

@@ -2316,6 +2316,720 @@
           }
         }
       }
+    },
+    "/v1/tickets": {
+      "post": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "File feedback",
+        "description": "Files a ticket with the person's feedback and optional context items describing where it happened (page, element, recent errors, failed API calls, records by ID). Context is stored as sent and never checked against other data. The API adds an `api.server` item. New tickets have status `new` and must be approved (`update_ticket` with `status: ready`) before they can be claimed.",
+        "operationId": "create_ticket",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "List tickets",
+        "description": "Tickets, oldest first, optionally filtered.",
+        "operationId": "list_tickets",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "new",
+                    "ready",
+                    "claimed",
+                    "resolved",
+                    "wontfix"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with this status.",
+              "title": "Status"
+            },
+            "description": "Only tickets with this status."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "bug",
+                    "idea",
+                    "question",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets of this kind.",
+              "title": "Kind"
+            },
+            "description": "Only tickets of this kind."
+          },
+          {
+            "name": "entity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only tickets with an `entity` context item for this record ID.",
+              "title": "Entity"
+            },
+            "description": "Only tickets with an `entity` context item for this record ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tickets/claim": {
+      "post": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Claim a ticket to work on",
+        "description": "Claims a ticket for 2 hours. Without `id`, claims the oldest `ready` ticket, or returns 204 if there is none. With `id`, claims that ticket; 409 if it isn't ready or someone else holds it. Claiming a ticket you already hold renews the claim. A lapsed claim returns the ticket to `ready`.",
+        "operationId": "claim_ticket",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No ticket is ready to claim."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change conflicts with other data (the detail says what to fix).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tickets/{ticketId}": {
+      "get": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Get a ticket",
+        "operationId": "get_ticket",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ticket ID (`tkt_...`).",
+              "examples": [
+                "tkt_01J..."
+              ],
+              "title": "Ticketid"
+            },
+            "description": "Ticket ID (`tkt_...`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Triage a ticket",
+        "description": "Changes `kind`, or `status`: `ready` approves the ticket for work, and also releases a claim or reopens a closed ticket (clearing its claim and resolution); `new` takes it back out of the queue. Returns the updated ticket.",
+        "operationId": "update_ticket",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ticket ID (`tkt_...`).",
+              "examples": [
+                "tkt_01J..."
+              ],
+              "title": "Ticketid"
+            },
+            "description": "Ticket ID (`tkt_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tickets/{ticketId}/brief": {
+      "get": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Get a ticket as a Markdown brief",
+        "description": "The ticket rendered as Markdown for an agent to work from: the feedback and context (fenced and marked as untrusted input), grouped into Frontend, Backend, and Data, and the calls for claiming and resolving it.",
+        "operationId": "get_ticket_brief",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ticket ID (`tkt_...`).",
+              "examples": [
+                "tkt_01J..."
+              ],
+              "title": "Ticketid"
+            },
+            "description": "Ticket ID (`tkt_...`)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "text/markdown": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tickets/{ticketId}/resolve": {
+      "post": {
+        "tags": [
+          "Feedback"
+        ],
+        "summary": "Close a ticket",
+        "description": "Closes the ticket as `resolved` or `wontfix` with a summary and optional link (e.g. the pull request), and clears any claim. 409 if it is already closed.",
+        "operationId": "resolve_ticket",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticketId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Ticket ID (`tkt_...`).",
+              "examples": [
+                "tkt_01J..."
+              ],
+              "title": "Ticketid"
+            },
+            "description": "Ticket ID (`tkt_...`)."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version.",
+              "title": "If-Match"
+            },
+            "description": "Optional. The ETag from a previous response; the change is applied only if the resource has not changed since. On mismatch the API returns 412 with the current version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveTicketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ticket"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Version of the returned resource; send it back as If-Match.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "A trip, traveler, or activity ID in the path does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The change conflicts with other data (the detail says what to fix).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "If-Match did not match the current ETag; `current` holds the current version.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request is invalid; `errors` lists each problem with its path.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2712,6 +3426,216 @@
         "title": "AddTravelersRequest",
         "description": "Body for `add_travelers`: several travelers added at once, all or nothing."
       },
+      "ApiRequestContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "api.request",
+            "title": "Type"
+          },
+          "operationId": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Operation id",
+            "description": "The operation's `operationId`, e.g. `update_activity`."
+          },
+          "status": {
+            "type": "integer",
+            "maximum": 599.0,
+            "minimum": 100.0,
+            "title": "Status",
+            "description": "HTTP status code of the response."
+          },
+          "problemType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem type",
+            "description": "`type` of the problem+json response, if any."
+          },
+          "errorPaths": {
+            "items": {
+              "type": "string",
+              "maxLength": 200,
+              "minLength": 1
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Error paths",
+            "description": "`path` of each validation error, e.g. `body.time`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "operationId",
+          "status"
+        ],
+        "title": "ApiRequestContext",
+        "description": "An API call that failed shortly before the ticket was filed. Never includes bodies."
+      },
+      "ApiServerContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "api.server",
+            "title": "Type"
+          },
+          "build": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build",
+            "description": "Version (git commit) of the API, or null if unknown."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "build"
+        ],
+        "title": "ApiServerContext",
+        "description": "Added by the API when the ticket is created; clients cannot send it."
+      },
+      "Claim": {
+        "properties": {
+          "by": {
+            "type": "string",
+            "title": "By",
+            "description": "Who claimed it, e.g. an agent session name."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires at",
+            "description": "When the claim lapses (UTC). Claim again before then to keep it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "by",
+          "expiresAt"
+        ],
+        "title": "Claim",
+        "description": "Who is working on a ticket, and until when."
+      },
+      "ClaimTicketRequest": {
+        "properties": {
+          "by": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "By",
+            "description": "Who is claiming, e.g. an agent session name. Claiming again renews.",
+            "examples": [
+              "claude-session-7f3a"
+            ]
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id",
+            "description": "A specific ticket to claim. Omit it to claim the oldest ready ticket."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "by"
+        ],
+        "title": "ClaimTicketRequest",
+        "description": "Body for `claim_ticket`."
+      },
+      "CreateTicketRequest": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Body",
+            "description": "The feedback, in the person's own words.",
+            "examples": [
+              "Notes get cut off on mobile; I can only see two lines."
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "idea",
+              "question",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "Default `other`.",
+            "default": "other"
+          },
+          "context": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WebPageContext"
+                },
+                {
+                  "$ref": "#/components/schemas/WebElementContext"
+                },
+                {
+                  "$ref": "#/components/schemas/WebErrorContext"
+                },
+                {
+                  "$ref": "#/components/schemas/ApiRequestContext"
+                },
+                {
+                  "$ref": "#/components/schemas/EntityContext"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "api.request": "#/components/schemas/ApiRequestContext",
+                  "entity": "#/components/schemas/EntityContext",
+                  "web.element": "#/components/schemas/WebElementContext",
+                  "web.error": "#/components/schemas/WebErrorContext",
+                  "web.page": "#/components/schemas/WebPageContext"
+                }
+              }
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Context",
+            "description": "Up to 20 context items."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "CreateTicketRequest",
+        "description": "Body for `create_ticket`. Only `body` is required."
+      },
       "CreateTripRequest": {
         "properties": {
           "name": {
@@ -2911,6 +3835,46 @@
         ],
         "title": "DayList",
         "description": "Response of `list_days`: the whole trip, day by day."
+      },
+      "EntityContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "entity",
+            "title": "Type"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z]{2,10}_[0-9A-Za-z]{1,40}$",
+            "title": "Id",
+            "description": "The record's ID. It is not checked; the record may since have been deleted.",
+            "examples": [
+              "act_01J..."
+            ]
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag",
+            "description": "The record's ETag when the person saw it, to tell whether it changed since."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "id"
+        ],
+        "title": "EntityContext",
+        "description": "A record the ticket is about, by ID. The ID prefix gives its type (`trip_`, `act_`, ...)."
       },
       "Location": {
         "properties": {
@@ -3153,6 +4117,232 @@
         ],
         "title": "ProblemError",
         "description": "One validation failure."
+      },
+      "Resolution": {
+        "properties": {
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "What was done, or why nothing will be."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Link to the change (e.g. a pull request), or null."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "summary",
+          "url"
+        ],
+        "title": "Resolution",
+        "description": "How a ticket was closed."
+      },
+      "ResolveTicketRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "wontfix"
+            ],
+            "title": "Status",
+            "description": "How the ticket ends."
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Summary",
+            "description": "What was done, or why nothing will be."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2048,
+                "examples": [
+                  "https://www.japan-guide.com/e/e3011.html"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Link to the change, e.g. a PR."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "summary"
+        ],
+        "title": "ResolveTicketRequest",
+        "description": "Body for `resolve_ticket`."
+      },
+      "Ticket": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Ticket ID, prefixed with `tkt_`.",
+            "examples": [
+              "tkt_01J..."
+            ]
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "title": "Schema version",
+            "description": "Version of the stored document shape."
+          },
+          "body": {
+            "type": "string",
+            "title": "Body",
+            "description": "The feedback, as written."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "idea",
+              "question",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "`bug`, `idea`, `question`, or `other`."
+          },
+          "context": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/WebPageContext"
+                },
+                {
+                  "$ref": "#/components/schemas/WebElementContext"
+                },
+                {
+                  "$ref": "#/components/schemas/WebErrorContext"
+                },
+                {
+                  "$ref": "#/components/schemas/ApiRequestContext"
+                },
+                {
+                  "$ref": "#/components/schemas/ApiServerContext"
+                },
+                {
+                  "$ref": "#/components/schemas/EntityContext"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "api.request": "#/components/schemas/ApiRequestContext",
+                  "api.server": "#/components/schemas/ApiServerContext",
+                  "entity": "#/components/schemas/EntityContext",
+                  "web.element": "#/components/schemas/WebElementContext",
+                  "web.error": "#/components/schemas/WebErrorContext",
+                  "web.page": "#/components/schemas/WebPageContext"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Context",
+            "description": "What the web app and the API knew."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "ready",
+              "claimed",
+              "resolved",
+              "wontfix"
+            ],
+            "title": "Status",
+            "description": "`new` (filed), `ready` (approved for work), `claimed` (being worked on), `resolved`, or `wontfix`."
+          },
+          "claim": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Claim"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim",
+            "description": "The current claim while `claimed`, else null."
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Resolution"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution",
+            "description": "How it was closed, once `resolved` or `wontfix`; else null."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created at",
+            "description": "When the ticket was filed (UTC)."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated at",
+            "description": "When the ticket last changed (UTC). The ETag is derived from this."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "schemaVersion",
+          "body",
+          "kind",
+          "context",
+          "status",
+          "claim",
+          "resolution",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "Ticket",
+        "description": "A piece of feedback, with context, queued for a person or an agent to work on."
+      },
+      "TicketList": {
+        "properties": {
+          "tickets": {
+            "items": {
+              "$ref": "#/components/schemas/Ticket"
+            },
+            "type": "array",
+            "title": "Tickets"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tickets"
+        ],
+        "title": "TicketList",
+        "description": "Tickets, oldest first."
       },
       "Traveler": {
         "properties": {
@@ -3616,6 +4806,34 @@
         "title": "UpdateLinkRequest",
         "description": "Body for `update_link`. Only the fields you send change."
       },
+      "UpdateTicketRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "ready"
+            ],
+            "title": "Status",
+            "description": "`ready` approves the ticket for work (also releases a claim or reopens a closed ticket); `new` takes it back out of the queue. Cannot be null."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "bug",
+              "idea",
+              "question",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "New kind. Cannot be null."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UpdateTicketRequest",
+        "description": "Body for `update_ticket`. Only the fields you send change."
+      },
       "UpdateTravelerRequest": {
         "properties": {
           "name": {
@@ -3724,6 +4942,166 @@
         "type": "object",
         "title": "UpdateTripRequest",
         "description": "Body for `update_trip`. Only the fields you send are changed; send null to clear\n`destination`.\n\nChanging `timezone` keeps every activity's UTC instants and recomputes the day of each timed\nactivity. Changing the dates or timezone is rejected if a scheduled activity would fall\noutside the trip's dates."
+      },
+      "WebElementContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "web.element",
+            "title": "Type"
+          },
+          "component": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Component",
+            "description": "Component name, e.g. `ActivityCard`.",
+            "examples": [
+              "ActivityCard"
+            ]
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "What it showed, e.g. the activity's title."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "component"
+        ],
+        "title": "WebElementContext",
+        "description": "The part of the screen the person pointed at."
+      },
+      "WebErrorContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "web.error",
+            "title": "Type"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Message",
+            "description": "The error message."
+          },
+          "stack": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stack",
+            "description": "Stack trace."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "message"
+        ],
+        "title": "WebErrorContext",
+        "description": "An error the web app hit shortly before the ticket was filed."
+      },
+      "WebPageContext": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "web.page",
+            "title": "Type"
+          },
+          "route": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Route",
+            "description": "Route pattern with `[param]` placeholders.",
+            "examples": [
+              "/trips/[tripId]/days/[date]"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Path",
+            "description": "The actual path, e.g. `/trips/trip_01J.../days/2027-04-03`."
+          },
+          "viewport": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d{1,5}x\\d{1,5}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewport",
+            "description": "Viewport size as `WIDTHxHEIGHT` in CSS pixels.",
+            "examples": [
+              "390x844"
+            ]
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "light",
+                  "dark"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme",
+            "description": "Color theme in use."
+          },
+          "build": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build",
+            "description": "Version (git commit) of the web app build."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "route",
+          "path"
+        ],
+        "title": "WebPageContext",
+        "description": "The screen the person was on."
       }
     },
     "securitySchemes": {

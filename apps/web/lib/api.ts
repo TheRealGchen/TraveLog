@@ -1,4 +1,6 @@
-import { createApiClient, type Problem } from "@travel/client";
+import { createApiClient, operationIds, type Problem } from "@travel/client";
+
+import { recordApiFailure, recordEtag, recordPageError } from "./feedback";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -6,6 +8,37 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000
 export const api = createApiClient({
   baseUrl: API_URL,
   token: process.env.NEXT_PUBLIC_API_TOKEN ?? "",
+});
+
+function operationId(request: Request, schemaPath: string): string {
+  return operationIds[`${request.method} ${schemaPath}`] ?? `${request.method} ${schemaPath}`;
+}
+
+// Remember ETags and recent failures so a feedback ticket can say what just happened. Failures
+// of the feedback calls themselves are left out. Only the operation, status, problem type, and
+// error paths are kept, never bodies.
+api.use({
+  async onResponse({ request, response, schemaPath }) {
+    const etag = response.headers.get("ETag");
+    if (etag) recordEtag(new URL(request.url).pathname, etag);
+    if (response.ok || schemaPath.startsWith("/v1/tickets")) return;
+    let problem: Partial<Problem> | undefined;
+    try {
+      problem = await response.clone().json();
+    } catch {
+      // Not JSON; record the status alone.
+    }
+    recordApiFailure({
+      operationId: operationId(request, schemaPath),
+      status: response.status,
+      problemType: problem?.type,
+      errorPaths: problem?.errors?.map((e) => e.path) ?? [],
+    });
+  },
+  onError({ request, schemaPath }) {
+    if (schemaPath.startsWith("/v1/tickets")) return;
+    recordPageError({ message: `Can't reach the API (${operationId(request, schemaPath)})` });
+  },
 });
 
 /** An API failure carrying the problem+json body, whose `detail` is shown to the user. */

@@ -138,8 +138,57 @@ Where the plan was ambiguous, the simplest option was picked and recorded here.
   Response models declare every field required, so the generated TypeScript types are exact.
 - **`schemaVersion` migrations** run in `repository/documents.py:from_document` on read.
 
+## Feedback tickets
+
+- **Tickets are their own collection** (`tickets`), not part of a trip. Feedback is often about
+  the app rather than one trip, it should outlive a deleted trip, and agents work across all of
+  it. The ticket code never reads trips, days, or other records.
+- **Context is a list of typed items** (`web.page`, `web.element`, `web.error`, `api.request`,
+  `entity`, and `api.server`), each with its own fields. The web app and the API each describe
+  what only they know. Items are checked for shape and size (at most 20, each a few KB) and then
+  stored as sent; an `entity` ID is never looked up, so feedback is never rejected because a
+  record has since changed or gone.
+- **No snapshot of records.** An `entity` item may carry the ETag the person saw, which shows
+  whether the record changed since; the current version is read through the normal API. This
+  keeps passport numbers and emails out of tickets. `api.request` items hold only the
+  operation, status, problem type, and error paths, never request or response bodies.
+- **`api.server.build`** is the API checkout's short git commit, read once at startup (null
+  outside a git clone). Clients cannot send `api.server`.
+- **Tickets start as `new` and only `ready` ones can be claimed.** The token is public (it is
+  in the web app's JavaScript), so anyone can file a ticket; a person approves each one before
+  an agent acts on it. `update_ticket` sets only `new` or `ready`; `ready` also releases a claim
+  or reopens a closed ticket, clearing its claim and resolution.
+- **Claims are leases.** `claim_ticket` is one `find_one_and_update` (sorted oldest first), so
+  two agents never get the same ticket. A claim lasts 2 hours and claiming again renews it. A
+  lapsed claim is not cleaned up in the database: it reads as `ready` with no claim (in
+  `get_ticket`, `list_tickets`, and the brief) and can be claimed again.
+- **`resolve_ticket` does not check who holds the claim**, so a person can close a ticket an
+  agent is working on. Send `If-Match` to avoid closing a ticket that changed.
+- **The brief** (`get_ticket_brief`, `text/markdown`) fences the feedback and every
+  client-sent field in code blocks longer than any backtick run inside them, and says to treat
+  them as data. It deliberately names no source files: an agent maps routes, components, and
+  operation IDs to the code, so moving files never makes old tickets wrong.
+- **No paging** on `list_tickets`, like `list_trips`; add it when the queue grows.
+
 ## Frontend behavior
 
+- **Feedback button** (`components/feedback-button.tsx`): a round icon button next to the
+  theme toggle on every page. The dialog lists everything it will send as removable chips:
+  - **the page:** the path and its route pattern, rebuilt from `useParams()` (each param value
+    becomes `[name]`), plus viewport, theme, and the build's git commit (`NEXT_PUBLIC_BUILD`, set
+    in `next.config.ts`);
+  - **the element last touched** on this page, or one picked with "Point at something". Only
+    components tagged `data-feedback="Name"` count, with an explicit `data-feedback-label` and
+    `data-feedback-id`; text is never scraped from the page, so traveler emails and passport
+    numbers can't be sent by accident;
+  - **records:** IDs in the route params and the element's `data-feedback-id`, each with the last
+    ETag the app saw for a response whose path ends in that ID;
+  - **the last 5 errors and failed API calls**, from window `error`/`unhandledrejection`
+    listeners and an openapi-fetch middleware in `lib/api.ts`. Calls are named by operationId
+    through `packages/client/src/operations.ts`, generated from `openapi.json` with the schema
+    (`just gen-client`; `check-client` checks both). Only the operation, status, problem type,
+    and error paths are kept, and failures of the feedback calls themselves are left out.
+  - The capture logic is plain functions in `lib/feedback.ts`, unit-tested with `node:test`.
 - **Countdown text** ("12 days to go", "Today!", "In progress", "Completed") is formatting of
   the API's `daysUntilStart` and `status`; the numbers and status come from the API.
 - **Day cards and day pages.** The trip page shows one large card per day (date, lodging, start

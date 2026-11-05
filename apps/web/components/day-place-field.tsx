@@ -34,7 +34,11 @@ export function DayPlaceField({
   }
 
   return (
-    <div className="grid gap-2 rounded-2xl border bg-card p-4 shadow-sm">
+    <div
+      data-feedback="DayPlaceField"
+      data-feedback-label={label}
+      className="grid gap-2 rounded-2xl border bg-card p-4 shadow-sm"
+    >
       <Label htmlFor={id} className="flex items-center gap-2 text-muted-foreground">
         {icon}
         {label}

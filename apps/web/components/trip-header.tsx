@@ -46,7 +46,7 @@ export function TripHeader({ trip }: { trip: Trip }) {
   }
 
   return (
-    <header className="space-y-6">
+    <header data-feedback="TripHeader" data-feedback-label={trip.name} className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div className="min-w-0 space-y-3">
           <div className="flex items-center gap-2">

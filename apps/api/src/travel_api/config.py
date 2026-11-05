@@ -1,5 +1,23 @@
 import os
+import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
+
+
+def _git_build() -> str | None:
+    """The short commit hash of the checkout the API runs from, or None outside a git clone."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    return result.stdout.strip() or None
 
 
 @dataclass(frozen=True)
@@ -11,6 +29,7 @@ class Settings:
     mongodb_db: str = "travel_planner"
     web_origins: list[str] = field(default_factory=lambda: ["http://localhost:3001"])
     link_previews: bool = True
+    build: str | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -28,4 +47,5 @@ class Settings:
             web_origins=[o.strip() for o in origins.split(",") if o.strip()],
             link_previews=os.environ.get("LINK_PREVIEWS", "true").lower()
             not in ("0", "false", "no"),
+            build=_git_build(),
         )
